@@ -1,0 +1,92 @@
+
+/* ==========================================================================
+   COGNIHIRE - Responsive Styles (responsive.css)
+   ========================================================================== */
+
+/* Tablets & Small Desktops (max-width: 1024px) */
+@media screen and (max-width: 1024px) {
+    .login-split {
+        flex-direction: column;
+    }
+    
+    .login-left, .login-right {
+        width: 100%;
+        min-height: 50vh;
+    }
+    
+    .login-avatar-preview {
+        width: 200px;
+        height: 200px;
+    }
+    
+    .interview-grid {
+        gap: 1rem;
+        padding: 1rem;
+    }
+}
+
+/* Mobile Devices (max-width: 768px) */
+@media screen and (max-width: 768px) {
+    .adaptive-setup { padding-top: 2rem; }
+    .setup-layout { grid-template-columns: 1fr; }
+    .question-preview { min-height: 280px; }
+    .welcome-panel { align-items: flex-start; flex-direction: column; }
+    .dashboard-grid { grid-template-columns: 1fr; }
+    .taskbar { justify-content: space-around; gap: 0; }
+    .taskbar-item { min-width: 4.5rem; }
+    .interview-grid {
+        grid-template-columns: 1fr;
+        height: auto;
+        min-height: 0;
+    }
+    
+    .video-card {
+        height: min(52vh, 520px);
+        min-height: 320px;
+    }
+    
+    .controls-area {
+        flex-direction: column;
+        gap: 1.5rem;
+    }
+
+    .speech-controls { width: 100%; justify-content: center; }
+    
+    .transcript-box {
+        margin: 0;
+        width: 100%;
+    }
+    
+    .tabs-header {
+        flex-direction: column;
+        gap: 0;
+    }
+    
+    .tab-btn {
+        width: 100%;
+        text-align: left;
+        padding: 1rem;
+        border-bottom: 1px solid #e2e8f0;
+    }
+    
+    .tab-btn.active {
+        border-bottom-width: 1px;
+        border-left: 4px solid var(--primary-color);
+        background: #f8fafc;
+    }
+}
+
+/* Small Mobile (max-width: 480px) */
+@media screen and (max-width: 480px) {
+    body { font-size: 14px; }
+    
+    .report-card {
+        padding: 1.5rem;
+    }
+    
+    .score-circle {
+        width: 100px;
+        height: 100px;
+        font-size: 1.5rem;
+    }
+}

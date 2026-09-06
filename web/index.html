@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>COGNIHIRE - AI-Powered Mock Interview Platform</title>
+    
+    <!-- Link CSS files -->
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/components.css">
+    <link rel="stylesheet" href="css/responsive.css">
+</head>
+<body>
+    <div class="app-container">
+        
+        <!-- ==========================================
+             1. LOGIN SCREEN
+             ========================================== -->
+        <div id="login-screen" class="screen active login-screen">
+            <div class="login-split">
+                <!-- Left Side: Branding & Avatar Preview -->
+                <div class="login-left">
+                    <div class="login-avatar-preview">
+                        <img class="login-circle-logo" src="logo.jpeg" alt="CogniHire logo">
+                        <span class="logo-star star-one">✦</span><span class="logo-star star-two">✧</span><span class="logo-star star-three">✦</span><span class="logo-star star-four">✧</span><span class="logo-star star-five">✦</span>
+                    </div>
+                    <h1 style="color: white; margin-bottom: 10px;">COGNIHIRE</h1>
+                    <p style="color: #cbd5e1; text-align: center; max-width: 80%;">
+                        Experience hyper-realistic AI mock interviews with instant, professional feedback.
+                    </p>
+                </div>
+                
+                <!-- Right Side: Login Form -->
+                <div class="login-right">
+                    <div class="login-card">
+                        <h2 id="auth-title" style="margin-bottom: 30px;">Welcome Back</h2>
+                        
+                        <form id="login-form">
+                            <div class="input-group">
+                                <label for="username">Username</label>
+                                <input type="text" id="username" class="form-control" placeholder="Enter your username" required>
+                            </div>
+                            <div class="input-group">
+                                <label for="password">Password</label>
+                                <input type="password" id="password" class="form-control" placeholder="Enter your password">
+                            </div>
+                            
+                            <button id="login-btn" class="btn btn-primary" style="width: 100%; margin-bottom: 15px;">Sign In</button>
+                            <button id="auth-toggle" type="button" class="text-button">Need an account? Create one</button>
+                            <p id="auth-message" class="form-message" role="status"></p>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="dashboard-screen" class="screen app-screen">
+            <header class="app-header">
+                <div class="brand-header"><img class="brand-logo" src="logo.jpeg" alt="CogniHire logo"><h1 id="dashboard-greeting">Your interview workspace</h1></div>
+                <button id="theme-toggle" class="icon-button" type="button" aria-label="Toggle black and white mode" title="Toggle black and white mode">◐</button>
+            </header>
+            <main class="dashboard-content">
+                <section class="welcome-panel">
+                    <div><span class="eyebrow">READY WHEN YOU ARE</span><h2>Practice with purpose.</h2><p>Set up a focused session and keep every answer in one place.</p></div>
+                    <button id="new-interview-btn" class="btn btn-primary">Start interview</button>
+                </section>
+                <section class="dashboard-grid">
+                    <article class="stat-card"><span>Sessions completed</span><strong id="session-count">0</strong></article>
+                    <article class="stat-card"><span>Average score</span><strong id="average-score">--</strong></article>
+                    <article class="stat-card"><span>Last practice</span><strong id="last-practice">Not yet</strong></article>
+                </section>
+                <section class="recent-section"><div class="section-heading"><h2>Recent sessions</h2><button class="text-button" data-view="history">View history</button></div><div id="recent-sessions" class="session-list"></div></section>
+            </main>
+            <nav class="taskbar" aria-label="Main navigation">
+                <button class="taskbar-item active" data-view="dashboard">⌂<span>Dashboard</span></button>
+                <button class="taskbar-item" data-view="history">◷<span>History</span></button>
+                <button class="taskbar-item" data-view="profile">◎<span>Profile</span></button>
+                <button id="logout-btn" class="taskbar-item">↪<span>Log out</span></button>
+            </nav>
+        </div>
+
+        <div id="history-screen" class="screen app-screen"><header class="app-header"><div class="brand-header"><img class="brand-logo" src="logo.jpeg" alt="CogniHire logo"><div><span class="eyebrow">YOUR PROGRESS</span><h1>Interview history</h1></div></div><button class="icon-button" data-view="dashboard" aria-label="Back to dashboard">←</button></header><main class="dashboard-content"><div id="history-list" class="session-list"></div></main><nav class="taskbar" aria-label="Main navigation"><button class="taskbar-item" data-view="dashboard">⌂<span>Dashboard</span></button><button class="taskbar-item active" data-view="history">◷<span>History</span></button><button class="taskbar-item" data-view="profile">◎<span>Profile</span></button><button class="taskbar-item" data-view="logout">↪<span>Log out</span></button></nav></div>
+        <div id="profile-screen" class="screen app-screen"><header class="app-header"><div class="brand-header"><img class="brand-logo" src="logo.jpeg" alt="CogniHire logo"><div><span class="eyebrow">ACCOUNT</span><h1>Your profile</h1></div></div><button class="icon-button" data-view="dashboard" aria-label="Back to dashboard">←</button></header><main class="dashboard-content"><section class="profile-panel"><div class="profile-avatar" id="profile-avatar">C</div><div><h2 id="profile-name">Candidate</h2><p>Local practice profile</p></div></section><button id="profile-logout" class="btn btn-danger">Log out</button></main><nav class="taskbar" aria-label="Main navigation"><button class="taskbar-item" data-view="dashboard">⌂<span>Dashboard</span></button><button class="taskbar-item" data-view="history">◷<span>History</span></button><button class="taskbar-item active" data-view="profile">◎<span>Profile</span></button><button class="taskbar-item" data-view="logout">↪<span>Log out</span></button></nav></div>
+
+        <!-- ==========================================
+             2. SETUP SCREEN
+             ========================================== -->
+        <div id="setup-screen" class="screen">
+            <div class="container setup-screen adaptive-setup">
+                <div class="setup-heading"><img class="brand-logo" src="logo.jpeg" alt="CogniHire logo"><span class="eyebrow">COGNIHIRE INTERVIEW BUILDER</span><h1>Design your next conversation.</h1><p>Choose a path and CogniHire will shape the interview around your goals.</p></div>
+                <div class="setup-progress"><span class="setup-step active">01 <b>Path</b></span><span class="setup-step">02 <b>Focus</b></span><span class="setup-step">03 <b>Session</b></span></div>
+                <div class="setup-layout"><div class="glass-card setup-card">
+                    <div class="input-group"><label for="career-path">Career path</label><select id="career-path" class="form-control"><option value="technical">Technical</option><option value="non-technical">Non-Technical</option><option value="government">Government / Competitive</option><option value="academic">Academic / Education</option></select></div>
+                    <div class="input-group"><label for="career-field">Specific field</label><select id="career-field" class="form-control"></select></div>
+                    <div class="input-group">
+                        <label id="role-label" for="job-role">Target role</label><select id="job-role" class="form-control"></select>
+                    </div>
+                    <div class="input-group"><label for="interview-purpose">Interview purpose</label><select id="interview-purpose" class="form-control"><option value="placement">Placement / Job interview</option><option value="practice">Practice and confidence</option><option value="internship">Internship selection</option><option value="exam">Exam preparation</option></select></div>
+                    <div class="input-group">
+                        <label for="interview-type">Interview Type</label>
+                        <select id="interview-type" class="form-control">
+                            <option value="Technical">Technical</option>
+                            <option value="HR">HR / Behavioral</option>
+                            <option value="Mixed">Mixed</option>
+                        </select>
+                    </div>
+
+                    <div class="input-group">
+                        <label for="question-count">Number of questions</label>
+                        <input id="question-count" class="form-control" type="number" min="1" max="20" value="5">
+                    </div>
+                    <div class="input-group"><label for="difficulty">Difficulty</label><select id="difficulty" class="form-control"><option value="guided">Guided</option><option value="standard" selected>Standard</option><option value="challenging">Challenging</option></select></div>
+                    <button id="start-btn" class="btn btn-primary setup-submit">Start tailored interview <span>→</span></button>
+                </div><aside class="question-preview"><div class="preview-orbit"><span>✦</span></div><span class="eyebrow">AI QUESTION MAP</span><h2 id="question-preview-title">Technical interview focus</h2><p id="question-preview-copy">Questions will test problem solving, core concepts, and role-specific technical judgment.</p><div id="question-topics" class="topic-list"></div></aside></div>
+            </div>
+        </div>
+
+        <!-- ==========================================
+             3. LIVE INTERVIEW (FOCUS MODE)
+             ========================================== -->
+        <div id="interview-screen" class="screen">
+            <div class="interview-header">
+                <div class="brand-header interview-brand">
+                    <img class="brand-logo" src="logo.jpeg" alt="CogniHire logo">
+                    <div>
+                    <h2 style="margin: 0;">Live Interview Session</h2>
+                    <span style="font-size: 0.9rem; color: var(--text-secondary);">Focus Mode Enabled</span>
+                    </div>
+                </div>
+                <div class="timer" id="timer-display">05:00</div>
+            </div>
+            
+            <div class="interview-grid">
+                <!-- Left: AI Avatar Video -->
+                <div class="video-card">
+                    <div class="video-frame">
+                        <video id="speaking-avatar" class="avatar-video interviewer-avatar" src="Speaking avatar video.mp4" autoplay muted loop playsinline aria-label="AI interviewer speaking"></video>
+                        <video id="listening-avatar" class="avatar-video interviewer-avatar avatar-visible" src="Listening avatar video.mp4" autoplay muted loop playsinline aria-label="AI interviewer listening"></video>
+                        <div class="video-label">Interviewer</div>
+                    </div>
+                </div>
+                
+                <!-- Right: Candidate Camera with Attire Scanner -->
+                <div class="video-card">
+                    <div class="video-frame">
+                        <video id="candidate-video" class="candidate-video" autoplay muted playsinline></video>
+                        <div class="video-label">You</div>
+                        <div id="media-status" class="media-status" role="status">Requesting camera and microphone...</div>
+                        
+                        <!-- Attire Scanner Overlay -->
+                        <div id="attire-scanner" class="attire-scanner">
+                            <div class="scanner-line"></div>
+                            <div class="scanning-text">Analyzing Professional Presence...</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Bottom: Controls & Live Transcript -->
+                <div class="controls-area">
+                    <div class="audio-visualizer">
+                        <div class="bar"></div>
+                        <div class="bar"></div>
+                        <div class="bar"></div>
+                        <div class="bar"></div>
+                        <div class="bar"></div>
+                    </div>
+                    
+                    <div class="transcript-box">
+                        <span class="question-prompt" id="question-prompt">Question 1: Tell me about a project you are proud of.</span>
+                        <span class="transcript-label">Live transcript</span><span id="transcript-text">Your spoken answer will appear here.</span>
+                    </div>
+                    <div class="speech-controls" aria-label="Question voice controls">
+                        <span class="control-caption">Question voice</span>
+                        <button id="speak-question-btn" class="btn btn-secondary" type="button">Play question</button>
+                        <button id="pause-question-btn" class="btn btn-secondary" type="button">Pause</button>
+                        <button id="stop-question-btn" class="btn btn-secondary" type="button">Stop</button>
+                    </div>
+                    <div class="speech-controls" aria-label="Answer voice controls">
+                        <span class="control-caption">Your answer</span>
+                        <button id="listen-answer-btn" class="btn btn-secondary" type="button">Start listening</button>
+                        <button id="pause-answer-btn" class="btn btn-secondary" type="button">Pause</button>
+                        <button id="continue-answer-btn" class="btn btn-secondary" type="button">Continue</button>
+                        <button id="retry-answer-btn" class="btn btn-secondary" type="button">Retry answer</button>
+                    </div>
+                    <button id="next-question-btn" class="btn btn-primary" type="button">Next question →</button>
+                    <button id="record-btn" class="btn btn-secondary" type="button">Start recording</button>
+                    <button onclick="endInterview()" class="btn btn-danger">End & Submit</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ==========================================
+             4. LOADING SCREEN
+             ========================================== -->
+        <div id="loading-screen" class="screen" style="justify-content: center; align-items: center;">
+            <div class="ai-loader">
+                <img class="brand-logo" src="logo.jpeg" alt="CogniHire logo">
+                <div class="spinner"></div>
+                <h2>AI is evaluating your responses...</h2>
+                <p>Generating technical scores, parsing transcripts, and compiling attire feedback.</p>
+            </div>
+        </div>
+
+        <!-- ==========================================
+             5. RESULTS SCREEN (REPORT CARD)
+             ========================================== -->
+        <div id="results-screen" class="screen">
+            <div class="container results-screen">
+                <img class="brand-logo results-logo" src="logo.jpeg" alt="CogniHire logo">
+                <h1 style="text-align: center; color: var(--primary-color);">Interview Report Card</h1>
+                
+                <div class="report-card">
+                    <div class="score-circle">
+                        <span id="overall-score">--/10</span>
+                    </div>
+                    
+                    <div class="tabs-header">
+                        <button class="tab-btn active" onclick="switchTab('performance')">Performance Overview</button>
+                        <button class="tab-btn" onclick="switchTab('detailed')">Detailed Review</button>
+                        <button class="tab-btn" onclick="switchTab('presence')">Professional Presence</button>
+                    </div>
+
+                    <!-- Tab 1: Performance -->
+                    <div id="pane-performance" class="tab-content active">
+                        <h3>Strengths</h3>
+                        <p>✓ Excellent communication and clear articulation.<br>✓ Strong understanding of core algorithms.</p>
+                        <h3 style="margin-top: 20px;">Areas for Improvement</h3>
+                        <p>⚠ Provide more quantitative metrics when discussing past projects.<br>⚠ Elaborate on system design trade-offs.</p>
+                    </div>
+
+                    <!-- Tab 2: Detailed Review -->
+                    <div id="pane-detailed" class="tab-content">
+                        <h3>Question 1: Algorithm Optimization</h3>
+                        <div style="background: #f8fafc; padding: 15px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid var(--text-secondary);">
+                            <strong>Your Answer:</strong><br>
+                            <span style="font-style: italic; color: var(--text-secondary);">"I recently worked on a project where..."</span>
+                        </div>
+                        <div style="background: #f0fdfa; padding: 15px; border-radius: 8px; border-left: 4px solid var(--success-color);">
+                            <strong>AI Suggested Answer:</strong><br>
+                            <span style="color: #0f766e;">"In my previous role, I optimized a search algorithm by reducing its time complexity from O(n^2) to O(n log n), resulting in a 40% speed increase in data retrieval."</span>
+                        </div>
+                    </div>
+
+                    <!-- Tab 3: Professional Presence (Attire) -->
+                    <div id="pane-presence" class="tab-content">
+                        <h3>Attire & Presence Assessment</h3>
+                        <div style="display: flex; align-items: center; gap: 20px; margin-top: 20px;">
+                            <div style="flex: 1; padding: 20px; background: rgba(56, 189, 248, 0.1); border-radius: 12px; border: 1px solid rgba(56, 189, 248, 0.3);">
+                                <h4>Visual Feedback</h4>
+                                <p id="attire-feedback">Excellent professional attire. Your choice of clothing perfectly matches the selected corporate role, projecting confidence and professionalism.</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div style="text-align: center; margin-top: 40px;">
+                        <button class="btn btn-primary" onclick="window.location.reload();">Start New Session</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Link JS files (Order matters) -->
+    <script src="js/api.js"></script>
+    <script src="js/theme.js"></script>
+    <script src="js/media.js"></script>
+    <script src="js/interview.js"></script>
+    <script src="js/results.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/dashboard.js"></script>
+    <script src="js/history.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,133 @@
+
+/* ==========================================================================
+   COGNIHIRE - Global Styles & Variables (style.css)
+   ========================================================================== */
+
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&family=Inter:wght@400;500;600&display=swap');
+
+:root {
+    /* Base Color Palette (Professional/Tech Default) */
+    --primary-color: #2563eb;
+    --primary-hover: #1d4ed8;
+    --secondary-color: #475569;
+    --background-color: #f8fafc;
+    --surface-color: #ffffff;
+    --text-primary: #0f172a;
+    --text-secondary: #64748b;
+    --accent-color: #38bdf8;
+    --danger-color: #ef4444;
+    --success-color: #10b981;
+    --glass-bg: rgba(255, 255, 255, 0.7);
+    
+    /* Typography */
+    --font-heading: 'Poppins', sans-serif;
+    --font-body: 'Inter', sans-serif;
+    
+    /* Shadows & Border Radius */
+    --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+    --border-radius: 12px;
+}
+
+/* Dynamic Theming */
+[data-theme="finance"] {
+    --primary-color: #0f766e;
+    --primary-hover: #115e59;
+    --accent-color: #fbbf24;
+}
+
+[data-theme="government"] {
+    --primary-color: #334155;
+    --primary-hover: #1e293b;
+    --accent-color: #e11d48;
+}
+
+[data-mono] {
+    --primary-color: #111111;
+    --primary-hover: #333333;
+    --secondary-color: #444444;
+    --background-color: #f4f4f4;
+    --surface-color: #ffffff;
+    --text-primary: #111111;
+    --text-secondary: #555555;
+    --accent-color: #777777;
+    --success-color: #333333;
+}
+
+[data-dark] {
+    --primary-color: #f8fafc;
+    --primary-hover: #cbd5e1;
+    --secondary-color: #cbd5e1;
+    --background-color: #09090b;
+    --surface-color: #18181b;
+    --text-primary: #f4f4f5;
+    --text-secondary: #a1a1aa;
+    --accent-color: #f8fafc;
+    --danger-color: #f87171;
+    --success-color: #86efac;
+    --glass-bg: rgba(24, 24, 27, 0.9);
+}
+
+[data-dark] .btn-primary { color: #09090b; background: #f8fafc; box-shadow: none; }
+[data-dark] .btn-secondary { background: #27272a; color: #f4f4f5; }
+[data-dark] .form-control { border-color: #3f3f46; color: var(--text-primary); }
+[data-dark] .login-right, [data-dark] .login-card { background: var(--surface-color); }
+
+/* Global Resets */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: var(--font-body);
+    background-color: var(--background-color);
+    color: var(--text-primary);
+    line-height: 1.6;
+    min-height: 100vh;
+    overflow-x: hidden;
+}
+
+h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-heading);
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+/* Screen Management System */
+.app-container {
+    width: 100%;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.screen {
+    display: none;
+    opacity: 0;
+    width: 100%;
+    min-height: 100vh;
+    transition: opacity 0.4s ease-in-out;
+}
+
+.screen.active {
+    display: block; /* Overridden in specific screens to flex */
+    opacity: 1;
+    animation: cogniReveal 0.65s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+@keyframes cogniReveal {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+body::before { content: ""; position: fixed; inset: 0; pointer-events: none; opacity: 0.28; background-image: radial-gradient(#2563eb 0.7px, transparent 0.7px); background-size: 22px 22px; mask-image: linear-gradient(to bottom, black, transparent 72%); }
+
+/* Layout Utilities */
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 2rem;
+}
