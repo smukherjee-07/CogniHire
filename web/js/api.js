@@ -13,12 +13,14 @@ const API = {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(config)
         });
+        if (!response.ok) throw new Error(`Unable to start interview (${response.status})`);
         return await response.json(); // Returns SESSION object (session_id, etc.)
     },
 
     // 2. Fetch Next Question
     async getNextQuestion(session_id) {
         const response = await fetch(`${API_BASE_URL}/interviews/${session_id}/next-question`);
+        if (!response.ok) throw new Error(`Unable to load question (${response.status})`);
         return await response.json(); // Returns QUESTION object
     },
 
@@ -33,12 +35,14 @@ const API = {
                 ...answerData
             })
         });
+        if (!response.ok) throw new Error(`Unable to save response (${response.status})`);
         return await response.json();
     },
 
     // 4. Get Final Results
     async getResults(session_id) {
         const response = await fetch(`${API_BASE_URL}/interviews/${session_id}/results`);
+        if (!response.ok) throw new Error(`Unable to load results (${response.status})`);
         // Returns aggregated FINAL RESULT and AI EVALUATION objects
         return await response.json();
     }

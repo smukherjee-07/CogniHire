@@ -6,7 +6,21 @@ let isFocusModeActive = false;
 let interviewTimer = null;
 
 async function startInterviewFlow(jobRole, interviewType, questionCount, interviewContext = {}) {
-    currentSession = { role: jobRole, type: interviewType, questions: questionCount, ...interviewContext };
+    let serverSession;
+    try {
+        serverSession = await API.startSession({
+            job_role: jobRole,
+            interview_type: interviewType,
+            question_count: questionCount,
+            user_id: currentUser?.id
+        });
+    } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unable to connect to the interview server.';
+        window.alert(`${message}. Start the API with: uvicorn app:app --reload`);
+        return;
+    }
+
+    currentSession = { ...serverSession, role: jobRole, type: interviewType, questions: questionCount, ...interviewContext };
     showScreen('interview-screen');
     
     // Activate Focus Mode UI
