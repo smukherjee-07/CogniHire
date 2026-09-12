@@ -84,6 +84,12 @@ class Database:
 		row = self.connection.execute(query, tuple(parameters)).fetchone()
 		return dict(row) if row else None
 
+	def get_user_by_username(self, username: str) -> dict[str, Any] | None:
+		return self._one(
+			"SELECT id, username, email, created_at FROM users WHERE username = ? COLLATE NOCASE",
+			(username.strip(),),
+		)
+
 	def create_user(self, username: str, password: str, email: str | None = None) -> dict[str, Any]:
 		user_id = str(uuid.uuid4())
 		self.connection.execute("INSERT INTO users (id, username, email, password_hash) VALUES (?, ?, ?, ?)", (user_id, username.strip(), email.strip() if email else None, _hash_password(password)))
@@ -102,6 +108,9 @@ class Database:
 		self.connection.commit()
 		return self._one("SELECT * FROM interviews WHERE id = ?", (interview_id,)) or {}
 
+	def get_interview(self, interview_id: str) -> dict[str, Any] | None:
+		return self._one("SELECT * FROM interviews WHERE id = ?", (interview_id,))
+
 	def add_questions(self, interview_id: str, questions: Iterable[str], source: str = "ai") -> list[dict[str, Any]]:
 		rows = [ (str(uuid.uuid4()), interview_id, number, str(text).strip(), source) for number, text in enumerate(questions, 1) if str(text).strip() ]
 		self.connection.executemany("INSERT INTO questions (id, interview_id, question_number, question_text, source) VALUES (?, ?, ?, ?, ?)", rows)
@@ -110,6 +119,28 @@ class Database:
 
 	def next_question(self, interview_id: str) -> dict[str, Any] | None:
 		return self._one("SELECT q.* FROM questions q LEFT JOIN responses r ON r.question_id = q.id WHERE q.interview_id = ? AND r.id IS NULL ORDER BY q.question_number LIMIT 1", (interview_id,))
+
+	def get_question(self, interview_id: str, question_id: str) -> dict[str, Any] | None:
+		return self._one(
+			"SELECT * FROM questions WHERE interview_id = ? AND id = ?",
+			(interview_id, question_id),
+		)
+
+	def list_responses(self, interview_id: str) -> list[dict[str, Any]]:
+		return [
+			dict(row)
+			for row in self.connection.execute(
+				"""
+				SELECT r.*, q.question_text, e.id AS evaluation_id
+				FROM responses r
+				JOIN questions q ON q.id = r.question_id
+				LEFT JOIN evaluations e ON e.response_id = r.id
+				WHERE r.interview_id = ?
+				ORDER BY q.question_number
+				""",
+				(interview_id,),
+			)
+		]
 
 	def save_response(self, interview_id: str, question_id: str, answer_text: str = "", answer_mode: str = "text", audio_file_path: str | None = None, video_file_path: str | None = None) -> dict[str, Any]:
 		response_id = str(uuid.uuid4())

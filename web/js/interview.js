@@ -32,26 +32,57 @@ async function startInterviewFlow(jobRole, interviewType, questionCount, intervi
     
     // Start Background Attire Scan
     triggerAttireScan();
+
+    await loadNextQuestion();
     
-    // TODO: Call API.startSession() here and begin the QUESTION -> ANSWER loop
     startTimer(300); // 5 minutes mock timer
     setupSpeechAndRecording();
+}
+
+async function submitCurrentAnswer() {
+    if (!currentSession?.currentQuestionId || !finalTranscript.trim()) return null;
+    const response = await API.submitAnswer(currentSession.session_id, currentSession.currentQuestionId, {
+        answer_text: finalTranscript.trim(),
+        answer_mode: 'text'
+    });
+    currentSession.lastResponseId = response.response_id;
+    return response;
+}
+
+async function loadNextQuestion() {
+    const question = await API.getNextQuestion(currentSession.session_id);
+    currentSession.currentQuestionId = question.question_id;
+    questionIndex = question.question_number - 1;
+    questionText = question.question;
+    const prompt = document.getElementById('question-prompt');
+    const transcript = document.getElementById('transcript-text');
+    if (prompt) prompt.textContent = `Question ${question.question_number}: ${questionText}`;
+    if (transcript) transcript.textContent = 'New question ready. Play question to hear it.';
+    finalTranscript = '';
+    setAvatarMode('listening');
 }
 
 async function endInterview() {
     clearInterval(interviewTimer);
     document.body.classList.remove('focus-mode');
     isFocusModeActive = false;
+
+    try {
+        await submitCurrentAnswer();
+        const result = await API.getResults(currentSession.session_id);
+        currentSession.score = result.ai_evaluation.score;
+        currentSession.report = result;
+        saveInterviewSession();
+        renderReportCard(result.final_result, result.ai_evaluation);
+    } catch (error) {
+        console.error('Unable to complete interview', error);
+        window.alert(error instanceof Error ? error.message : 'Unable to load interview results.');
+        return;
+    }
     
     // Cleanup Media
     stopMedia();
-    saveInterviewSession();
-    
-    // Simulate API fetch delay for final report
-    showScreen('loading-screen'); // Show AI processing animation
-    setTimeout(() => {
-        showScreen('results-screen');
-    }, 2000);
+    showScreen('results-screen');
 }
 
 function saveInterviewSession() {

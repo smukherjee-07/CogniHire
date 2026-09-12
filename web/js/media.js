@@ -205,18 +205,20 @@ function retryAnswer() {
     window.setTimeout(startAnswerListening, 120);
 }
 
-function nextQuestion() {
+async function nextQuestion() {
     stopAnswerListening();
     stopQuestionSpeech();
-    finalTranscript = '';
-    questionIndex = (questionIndex + 1) % questionBank.length;
-    questionText = questionBank[questionIndex];
-    const prompt = document.getElementById('question-prompt');
-    const transcript = document.getElementById('transcript-text');
-    if (prompt) prompt.textContent = `Question ${questionIndex + 1}: ${questionText}`;
-    if (transcript) transcript.textContent = 'New question ready. Play question to hear it.';
-    updateMediaStatus('Next question ready.', false);
-    setAvatarMode('listening');
+    try {
+        await submitCurrentAnswer();
+        await loadNextQuestion();
+        updateMediaStatus('Next question ready.', false);
+    } catch (error) {
+        if (error instanceof Error && error.message.includes('(404)')) {
+            await endInterview();
+            return;
+        }
+        updateMediaStatus(error instanceof Error ? error.message : 'Unable to load the next question.', true);
+    }
 }
 
 function updateAnswerControls(state) {
