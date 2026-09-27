@@ -14,9 +14,40 @@
     <div class="app-container">
         
         <!-- ==========================================
-             1. LOGIN SCREEN
+             1. INTRO SCREEN
              ========================================== -->
-        <div id="login-screen" class="screen active login-screen">
+        <div id="intro-screen" class="screen active intro-screen">
+            <div class="intro-shell">
+                <div class="intro-visual" aria-hidden="true">
+                    <div class="intro-orbit orbit-one"></div>
+                    <div class="intro-orbit orbit-two"></div>
+                    <div class="intro-logo-mark">
+                        <span class="logo-shard shard-top"></span>
+                        <span class="logo-shard shard-right"></span>
+                        <span class="logo-shard shard-bottom"></span>
+                        <span class="logo-shard shard-left"></span>
+                        <img src="logo.jpeg" alt="">
+                    </div>
+                </div>
+                <div class="intro-copy">
+                    <span class="eyebrow">YOUR NEXT ANSWER STARTS HERE</span>
+                    <h1>Meet <span>CogniHire.</span></h1>
+                    <p class="intro-lead">A thoughtful AI interview partner that helps you practice with confidence, sharpen every answer, and show up ready.</p>
+                    <div class="intro-features">
+                        <div><strong>01</strong><span>Choose your path and target role.</span></div>
+                        <div><strong>02</strong><span>Practice a realistic, adaptive interview.</span></div>
+                        <div><strong>03</strong><span>Get clear feedback you can use.</span></div>
+                    </div>
+                    <button id="proceed-login-btn" class="btn btn-primary intro-cta" type="button">Proceed to login <span aria-hidden="true">↗</span></button>
+                    <p class="intro-note">Built for practice, progress, and the moment you feel ready.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- ==========================================
+             2. LOGIN SCREEN
+             ========================================== -->
+        <div id="login-screen" class="screen login-screen">
             <div class="login-split">
                 <!-- Left Side: Branding & Avatar Preview -->
                 <div class="login-left">
@@ -83,7 +114,7 @@
         <div id="profile-screen" class="screen app-screen"><header class="app-header"><div class="brand-header"><img class="brand-logo" src="logo.jpeg" alt="CogniHire logo"><div><span class="eyebrow">ACCOUNT</span><h1>Your profile</h1></div></div><button class="icon-button" data-view="dashboard" aria-label="Back to dashboard">←</button></header><main class="dashboard-content"><section class="profile-panel"><div class="profile-avatar" id="profile-avatar">C</div><div><h2 id="profile-name">Candidate</h2><p>Local practice profile</p></div></section><button id="profile-logout" class="btn btn-danger">Log out</button></main><nav class="taskbar" aria-label="Main navigation"><button class="taskbar-item" data-view="dashboard">⌂<span>Dashboard</span></button><button class="taskbar-item" data-view="history">◷<span>History</span></button><button class="taskbar-item active" data-view="profile">◎<span>Profile</span></button><button class="taskbar-item" data-view="logout">↪<span>Log out</span></button></nav></div>
 
         <!-- ==========================================
-             2. SETUP SCREEN
+             3. SETUP SCREEN
              ========================================== -->
         <div id="setup-screen" class="screen">
             <div class="container setup-screen adaptive-setup">
@@ -116,7 +147,7 @@
         </div>
 
         <!-- ==========================================
-             3. LIVE INTERVIEW (FOCUS MODE)
+             4. LIVE INTERVIEW (FOCUS MODE)
              ========================================== -->
         <div id="interview-screen" class="screen">
             <div class="interview-header">
@@ -190,7 +221,7 @@
         </div>
 
         <!-- ==========================================
-             4. LOADING SCREEN
+             5. LOADING SCREEN
              ========================================== -->
         <div id="loading-screen" class="screen" style="justify-content: center; align-items: center;">
             <div class="ai-loader">
@@ -202,7 +233,7 @@
         </div>
 
         <!-- ==========================================
-             5. RESULTS SCREEN (REPORT CARD)
+             6. RESULTS SCREEN (REPORT CARD)
              ========================================== -->
         <div id="results-screen" class="screen">
             <div class="container results-screen">

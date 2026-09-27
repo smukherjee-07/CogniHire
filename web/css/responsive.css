@@ -5,6 +5,9 @@
 
 /* Tablets & Small Desktops (max-width: 1024px) */
 @media screen and (max-width: 1024px) {
+    .intro-shell { grid-template-columns: 0.8fr 1.2fr; gap: 2rem; padding: 3rem; }
+    .intro-visual { min-height: 360px; }
+    .intro-logo-mark { width: min(30vw, 240px); }
     .login-split {
         flex-direction: column;
     }
@@ -27,6 +30,14 @@
 
 /* Mobile Devices (max-width: 768px) */
 @media screen and (max-width: 768px) {
+    .intro-shell { grid-template-columns: 1fr; gap: 0; justify-items: center; padding: 2.5rem 1.5rem 4rem; text-align: center; }
+    .intro-visual { min-height: 285px; width: 100%; }
+    .intro-logo-mark { width: 190px; }
+    .orbit-one { width: 250px; height: 250px; }
+    .orbit-two { width: 180px; height: 280px; }
+    .intro-copy { display: grid; justify-items: center; }
+    .intro-copy h1 { font-size: clamp(3.4rem, 16vw, 5.5rem); }
+    .intro-features { width: min(100%, 390px); text-align: left; }
     .adaptive-setup { padding-top: 2rem; }
     .setup-layout { grid-template-columns: 1fr; }
     .question-preview { min-height: 280px; }
@@ -79,6 +90,10 @@
 /* Small Mobile (max-width: 480px) */
 @media screen and (max-width: 480px) {
     body { font-size: 14px; }
+    .intro-shell { padding-inline: 1.25rem; }
+    .intro-visual { min-height: 245px; }
+    .intro-logo-mark { width: 165px; }
+    .intro-features { margin: 1.5rem 0; }
     
     .report-card {
         padding: 1.5rem;

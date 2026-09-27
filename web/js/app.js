@@ -53,6 +53,16 @@ function showScreen(screenId) {
     }
 }
 
+function openLoginFromIntro() {
+    const introScreen = document.getElementById('intro-screen');
+    if (!introScreen) return;
+    introScreen.classList.add('intro-exiting');
+    window.setTimeout(() => {
+        introScreen.classList.remove('active', 'intro-exiting');
+        showScreen('login-screen');
+    }, 820);
+}
+
 function openApp(view = 'dashboard') {
     if (view === 'logout') { logoutUser(); return; }
     showScreen(`${view}-screen`);
@@ -74,6 +84,7 @@ document.getElementById('login-form')?.addEventListener('submit', (event) => {
     openApp();
 });
 
+document.getElementById('proceed-login-btn')?.addEventListener('click', openLoginFromIntro);
 document.getElementById('auth-toggle')?.addEventListener('click', toggleAuthMode);
 document.getElementById('theme-toggle')?.addEventListener('click', toggleMonoTheme);
 document.querySelectorAll('[data-view]').forEach((button) => button.addEventListener('click', () => openApp(button.dataset.view)));

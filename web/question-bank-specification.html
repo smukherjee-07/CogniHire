@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>CogniHire Question Bank Specification</title>
+<style>
+@page { size: A4; margin: 15mm; }
+:root { --navy:#172554; --blue:#2563eb; --ink:#172033; --muted:#64748b; --line:#cbd5e1; --pale:#eff6ff; }
+* { box-sizing:border-box; }
+body { margin:0; color:var(--ink); font:10.5pt Arial, sans-serif; line-height:1.4; }
+.cover { min-height:245mm; display:flex; flex-direction:column; justify-content:center; page-break-after:always; }
+.brand { color:var(--navy); font-size:33pt; font-weight:800; letter-spacing:-1px; }
+.kicker { color:var(--blue); font-weight:700; text-transform:uppercase; letter-spacing:1.5px; margin-top:20px; }
+h1 { color:var(--navy); font-size:25pt; margin:8px 0 14px; }
+h2 { color:var(--blue); font-size:19pt; border-bottom:2px solid var(--blue); padding-bottom:5px; margin-top:0; }
+h3 { color:var(--navy); font-size:14pt; margin-bottom:5px; }
+p { margin:6px 0; }
+.meta { border-left:5px solid var(--blue); background:var(--pale); padding:14px; margin-top:25px; }
+.small { color:var(--muted); font-size:9pt; }
+.path { page-break-before:always; }
+.path:first-of-type { page-break-before:auto; }
+.path-head { display:flex; justify-content:space-between; align-items:end; gap:12px; }
+.path-count { color:var(--muted); font-size:9pt; }
+table { width:100%; border-collapse:collapse; margin:12px 0 20px; page-break-inside:auto; }
+thead { display:table-header-group; }
+tr { page-break-inside:avoid; }
+th { background:var(--navy); color:white; text-align:left; padding:7px; font-size:9pt; }
+td { border:1px solid var(--line); padding:7px; vertical-align:top; }
+tr:nth-child(even) td { background:#f8fafc; }
+ul { margin:4px 0 0; padding-left:18px; }
+li { margin:2px 0; }
+.pill { display:inline-block; border:1px solid #93c5fd; color:var(--navy); background:#dbeafe; padding:3px 7px; border-radius:10px; margin:2px 2px 2px 0; font-size:8.5pt; }
+.note { background:#f8fafc; border:1px solid var(--line); padding:10px; margin:10px 0; }
+.footer { color:var(--muted); font-size:8.5pt; border-top:1px solid var(--line); margin-top:24px; padding-top:6px; }
+</style>
+</head>
+<body>
+<section class="cover">
+  <div class="brand">COGNIHIRE</div>
+  <div class="kicker">Database team handoff</div>
+  <h1>Interview Question Bank Specification</h1>
+  <p>Career paths, fields, target roles, interview purposes, difficulty levels, and question-topic coverage for the CogniHire interview builder.</p>
+  <div class="meta"><b>Purpose</b><br>Use this document to organize and find question sets. This is a content specification only; it does not create or modify a database.</div>
+  <p class="small">Generated from the current CogniHire frontend configuration on September 5, 2026.</p>
+</section>
+<section>
+<h2>Shared Interview Configuration</h2>
+<table><thead><tr><th>Configuration</th><th>Available values</th><th>Database guidance</th></tr></thead><tbody>
+<tr><td>Interview purpose</td><td>Placement / Job interview; Practice and confidence; Internship selection; Exam preparation</td><td>Use purpose to prioritize question intent and evaluation rubric.</td></tr>
+<tr><td>Interview type</td><td>Technical; HR / Behavioral; Mixed</td><td>Store as the question mode or filter.</td></tr>
+<tr><td>Difficulty</td><td>Guided; Standard; Challenging</td><td>Each question set should be tagged with one level.</td></tr>
+<tr><td>Question count</td><td>Candidate selects 1 to 20; default is 5</td><td>Return the requested number of questions from the matching set.</td></tr>
+</tbody></table>
+<div class="note"><b>Suggested question record keys:</b> career_path, field, target_role, interview_purpose, interview_type, difficulty, topic, question_text, expected_points, answer_evaluation_criteria.</div>
+<h2>Coverage Summary</h2>
+<table><thead><tr><th>Career path</th><th>Fields</th><th>Question focus</th></tr></thead><tbody>
+<tr><td>Technical</td><td>6</td><td>Role knowledge, problem solving, systems, tools, quality, and practical scenarios.</td></tr>
+<tr><td>Non-Technical</td><td>6</td><td>Communication, domain judgment, business cases, planning, negotiation, and people skills.</td></tr>
+<tr><td>Government / Competitive</td><td>6</td><td>Exam-specific knowledge, current affairs, reasoning, governance, ethics, and service motivation.</td></tr>
+<tr><td>Academic / Education</td><td>4</td><td>Subject foundation, goals, research, methodology, teaching, and academic impact.</td></tr>
+</tbody></table>
+<div class="footer">CogniHire • Frontend question-bank integration specification</div>
+</section>
+
+<section class="path"><div class="path-head"><h2>1. Technical</h2><span class="path-count">6 fields</span></div><table><thead><tr><th>Field</th><th>Target roles</th><th>Question topics</th></tr></thead><tbody>
+<tr><td>Software Development</td><td>Software Engineer<br>Backend Developer<br>Frontend Developer</td><td>Data structures; Algorithms; System design; Code quality</td></tr>
+<tr><td>Data Science</td><td>Data Scientist<br>Data Analyst<br>Product Analyst</td><td>Statistics; Data analysis; Machine learning; Business insight</td></tr>
+<tr><td>AI / ML</td><td>ML Engineer<br>AI Researcher<br>NLP Engineer</td><td>Model fundamentals; Feature engineering; Evaluation; AI ethics</td></tr>
+<tr><td>Cyber Security</td><td>Security Analyst<br>Penetration Tester<br>Security Engineer</td><td>Threat analysis; Network security; Incident response; Risk management</td></tr>
+<tr><td>Cloud / DevOps</td><td>DevOps Engineer<br>Cloud Engineer<br>Site Reliability Engineer</td><td>Cloud architecture; CI/CD; Infrastructure; Reliability</td></tr>
+<tr><td>Web / Mobile</td><td>Web Developer<br>Mobile App Developer<br>Full Stack Developer</td><td>Frontend architecture; APIs; Performance; Accessibility</td></tr>
+</tbody></table></section>
+
+<section class="path"><div class="path-head"><h2>2. Non-Technical</h2><span class="path-count">6 fields</span></div><table><thead><tr><th>Field</th><th>Target roles</th><th>Question topics</th></tr></thead><tbody>
+<tr><td>HR</td><td>HR Executive<br>Talent Acquisition Specialist<br>People Operations Manager</td><td>Recruitment; Employee relations; Conflict resolution; People strategy</td></tr>
+<tr><td>Marketing</td><td>Marketing Manager<br>Brand Strategist<br>Digital Marketing Specialist</td><td>Customer research; Brand strategy; Campaign planning; Marketing metrics</td></tr>
+<tr><td>Finance</td><td>Financial Analyst<br>Investment Analyst<br>Accounts Manager</td><td>Financial statements; Valuation; Risk analysis; Business cases</td></tr>
+<tr><td>Sales</td><td>Sales Executive<br>Account Manager<br>Business Sales Manager</td><td>Needs discovery; Objection handling; Negotiation; Account growth</td></tr>
+<tr><td>Operations</td><td>Operations Manager<br>Process Analyst<br>Supply Chain Coordinator</td><td>Process improvement; Planning; Quality control; Resource decisions</td></tr>
+<tr><td>Business Development</td><td>Business Development Manager<br>Partnerships Manager<br>Growth Executive</td><td>Market expansion; Partnerships; Lead qualification; Revenue strategy</td></tr>
+</tbody></table></section>
+
+<section class="path"><div class="path-head"><h2>3. Government / Competitive</h2><span class="path-count">6 fields</span></div><table><thead><tr><th>Field</th><th>Target services / roles</th><th>Question topics</th></tr></thead><tbody>
+<tr><td>UPSC Civil Services</td><td>IAS Officer<br>IPS Officer<br>IFS Officer<br>IRS Officer</td><td>Current affairs; Polity and governance; Ethics and judgment; Essay and administration</td></tr>
+<tr><td>SSC</td><td>SSC CGL Officer<br>SSC CHSL Executive<br>SSC JE Engineer<br>SSC MTS Staff</td><td>Quantitative aptitude; Reasoning; English language; General awareness</td></tr>
+<tr><td>Banking</td><td>Bank PO<br>Bank Clerk<br>Specialist Officer<br>RBI Grade B Officer</td><td>Banking awareness; Quantitative aptitude; Reasoning ability; Financial awareness</td></tr>
+<tr><td>Railway</td><td>RRB NTPC Executive<br>Railway Group D<br>Assistant Loco Pilot<br>Junior Engineer</td><td>General science; Mathematics; Reasoning; Railway awareness</td></tr>
+<tr><td>Defence</td><td>NDA Officer<br>CDS Officer<br>AFCAT Officer<br>Agniveer</td><td>National security; Leadership; Current affairs; Situational judgment</td></tr>
+<tr><td>State PSC</td><td>State Civil Services Officer<br>State Police Officer<br>Revenue Officer<br>Municipal Officer</td><td>State history and culture; Constitution; Local governance; Current affairs</td></tr>
+</tbody></table></section>
+
+<section class="path"><div class="path-head"><h2>4. Academic / Education</h2><span class="path-count">4 fields</span></div><table><thead><tr><th>Field</th><th>Target roles</th><th>Question topics</th></tr></thead><tbody>
+<tr><td>University Admission</td><td>Undergraduate applicant<br>Postgraduate applicant<br>International applicant</td><td>Subject foundation; Academic goals; Course fit; Future plans</td></tr>
+<tr><td>Scholarship</td><td>Scholarship applicant<br>Merit scholar applicant<br>Fellowship applicant</td><td>Achievements; Financial need; Community impact; Long-term goals</td></tr>
+<tr><td>Research</td><td>Research candidate<br>Research assistant<br>PhD scholar</td><td>Research proposal; Methodology; Literature knowledge; Research impact</td></tr>
+<tr><td>Teaching</td><td>Teaching fellow<br>Lecturer applicant<br>Academic coordinator</td><td>Subject knowledge; Lesson planning; Student engagement; Assessment methods</td></tr>
+</tbody></table></section>
+
+<section class="path"><h2>Question Selection Rules</h2><ol><li>Match the candidate's career path and field.</li><li>Filter by target role or government service.</li><li>Filter by interview purpose and interview type.</li><li>Filter by difficulty: Guided, Standard, or Challenging.</li><li>Prioritize the listed field topics, distributing questions across topics when possible.</li><li>Return the requested question count, from 1 to 20.</li></ol><div class="note"><b>Example:</b> Government → Banking → RBI Grade B Officer → Exam preparation → Standard should return questions tagged Banking, RBI Grade B Officer, Exam preparation, Standard, and topics such as banking awareness, quantitative aptitude, reasoning ability, and financial awareness.</div><div class="footer">CogniHire • Database team handoff • End of specification</div></section>
+</body>
+</html>
