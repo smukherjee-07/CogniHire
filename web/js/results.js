@@ -25,11 +25,11 @@ function switchTab(tabId) {
 
 // Function to parse the FINAL RESULT and AI EVALUATION objects from backend
 function renderReportCard(finalResultData, aiEvaluationData) {
-    // Populate Overall Score
+    // Populate Overall Score from the backend result.
     const scoreElement = document.getElementById('overall-score');
     if (scoreElement) {
-        // Using strict API contract variable 'score' (0-10)
-        scoreElement.textContent = `${aiEvaluationData.score}/10`; 
+        const score = Number(aiEvaluationData?.score ?? finalResultData?.score);
+        scoreElement.textContent = Number.isFinite(score) ? `${score}/10` : '--/10';
     }
     
     // Populate Strengths & Weaknesses...

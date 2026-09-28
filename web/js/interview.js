@@ -20,7 +20,10 @@ async function startInterviewFlow(jobRole, interviewType, questionCount, intervi
         return;
     }
 
-    currentSession = { ...serverSession, role: jobRole, type: interviewType, questions: questionCount, ...interviewContext };
+    const actualQuestionCount = serverSession.questions?.length
+        ?? serverSession.interview?.question_count
+        ?? questionCount;
+    currentSession = { ...serverSession, role: jobRole, type: interviewType, questions: actualQuestionCount, ...interviewContext };
     showScreen('interview-screen');
     
     // Activate Focus Mode UI
@@ -40,12 +43,14 @@ async function startInterviewFlow(jobRole, interviewType, questionCount, intervi
 }
 
 async function submitCurrentAnswer() {
-    if (!currentSession?.currentQuestionId || !finalTranscript.trim()) return null;
+    if (!currentSession?.currentQuestionId || !finalTranscript.trim()
+        || currentSession.lastSubmittedQuestionId === currentSession.currentQuestionId) return null;
     const response = await API.submitAnswer(currentSession.session_id, currentSession.currentQuestionId, {
         answer_text: finalTranscript.trim(),
         answer_mode: 'text'
     });
     currentSession.lastResponseId = response.response_id;
+    currentSession.lastSubmittedQuestionId = currentSession.currentQuestionId;
     return response;
 }
 
@@ -89,7 +94,7 @@ function saveInterviewSession() {
     if (!currentUser || !currentSession) return;
     const key = `cognihire-sessions-${currentUser.username}`;
     const sessions = JSON.parse(localStorage.getItem(key) || '[]');
-    sessions.unshift({ ...currentSession, score: 8, date: new Date().toLocaleDateString() });
+    sessions.unshift({ ...currentSession, date: new Date().toLocaleDateString() });
     localStorage.setItem(key, JSON.stringify(sessions));
 }
 
