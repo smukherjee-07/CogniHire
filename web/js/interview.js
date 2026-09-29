@@ -43,11 +43,13 @@ async function startInterviewFlow(jobRole, interviewType, questionCount, intervi
 }
 
 async function submitCurrentAnswer() {
-    if (!currentSession?.currentQuestionId || !finalTranscript.trim()
+    if (!currentSession?.currentQuestionId
         || currentSession.lastSubmittedQuestionId === currentSession.currentQuestionId) return null;
+    const answerText = finalTranscript.trim();
     const response = await API.submitAnswer(currentSession.session_id, currentSession.currentQuestionId, {
-        answer_text: finalTranscript.trim(),
-        answer_mode: 'text'
+        answer_text: answerText,
+        answer_mode: 'text',
+        skipped: !answerText
     });
     currentSession.lastResponseId = response.response_id;
     currentSession.lastSubmittedQuestionId = currentSession.currentQuestionId;

@@ -67,6 +67,7 @@ class InterviewService:
         question_id: str,
         answer_text: str = "",
         answer_mode: str = "text",
+        skipped: bool = False,
         audio_file_path: str | None = None,
         video_file_path: str | None = None,
     ) -> dict[str, Any]:
@@ -78,7 +79,9 @@ class InterviewService:
             raise ValueError("Interview session is already completed")
         if answer_mode not in {"text", "audio", "video", "audio_video"}:
             raise ValueError("Unsupported answer mode")
-        if not answer_text.strip() and not (audio_file_path or video_file_path):
+        if skipped and (answer_text.strip() or audio_file_path or video_file_path):
+            raise ValueError("A skipped question cannot include an answer or media")
+        if not skipped and not answer_text.strip() and not (audio_file_path or video_file_path):
             raise ValueError("Answer text or media is required")
         return self.database.save_response(
             interview_id=session_id,
@@ -140,6 +143,15 @@ class InterviewService:
         return questions[:question_count], "local"
 
     def _evaluate(self, response: dict[str, Any], session: dict[str, Any]) -> dict[str, Any]:
+        if response["answer_mode"] == "text" and not response["answer_text"].strip():
+            return {
+                "score": 0.0,
+                "strengths": [],
+                "weaknesses": ["Question skipped; no answer was evaluated."],
+                "feedback": "This question was skipped.",
+                "recommendation": "Answer the question to receive feedback.",
+                "raw": {"source": "skipped"},
+            }
         if response["answer_text"].strip() and (os.getenv("AI_API_KEY") or os.getenv("GEMINI_API_KEY")):
             try:
                 if self._evaluator is None:

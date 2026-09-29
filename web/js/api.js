@@ -26,7 +26,7 @@ const API = {
 
     // 3. Submit Answer
     async submitAnswer(session_id, question_id, answerData) {
-        // Enforcing ANSWER variables: answer_text, answer_mode, audio_file_path, video_file_path
+        // Enforcing ANSWER variables: answer_text, answer_mode, audio_file_path, video_file_path, skipped
         const response = await fetch(`${API_BASE_URL}/interviews/${session_id}/responses`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },

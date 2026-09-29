@@ -50,6 +50,7 @@ class ResponseRequest(BaseModel):
 	question_id: str = Field(min_length=1)
 	answer_text: str = ""
 	answer_mode: str = "text"
+	skipped: bool = False
 	audio_file_path: str | None = None
 	video_file_path: str | None = None
 
@@ -125,6 +126,7 @@ def submit_response(session_id: str, request: ResponseRequest) -> dict[str, Any]
 				question_id=request.question_id,
 				answer_text=request.answer_text,
 				answer_mode=request.answer_mode,
+				skipped=request.skipped,
 				audio_file_path=request.audio_file_path,
 				video_file_path=request.video_file_path,
 			)
