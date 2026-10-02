@@ -43,7 +43,8 @@ class AnswerEvaluator:
                 "recommendation": payload.get("recommendation", ""),
             }
 
-        raise ValueError("AI response did not contain a valid evaluation payload.")
+        detail = response.get("error_message") if isinstance(response, dict) else ""
+        raise ValueError(detail or "AI response did not contain a valid evaluation payload.")
 
 
 __all__ = ["AnswerEvaluator"]

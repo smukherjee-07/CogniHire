@@ -2,21 +2,32 @@
 
 from __future__ import annotations
 
+import logging
 import os
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 from ai.evaluator import AnswerEvaluator
 from ai.question_generator import QuestionGenerator
+from backend.question_bank import pick_questions
 from database.database import Database
 
+logger = logging.getLogger(__name__)
 
+# Last resort, only used if the question_bank table is empty.
 FALLBACK_QUESTIONS = (
-    "What interests you most about working in this role?",
+    "What interests you most about working as a {role}?",
     "Describe a challenging problem you solved and how you approached it.",
     "How do you check the quality of your work before delivering it?",
     "Tell me about a time you received difficult feedback and acted on it.",
-    "What would you focus on during your first 30 days in this role?",
+    "What would you focus on during your first 30 days as a {role}?",
 )
+
+MAX_PARALLEL_EVALUATIONS = 3
+
+
+def ai_configured() -> bool:
+    return bool(os.getenv("AI_API_KEY") or os.getenv("GEMINI_API_KEY"))
 
 
 class InterviewService:
@@ -43,6 +54,8 @@ class InterviewService:
             raise ValueError("Job role is required")
         if not 1 <= question_count <= 20:
             raise ValueError("Question count must be between 1 and 20")
+        if not self.database.get_user(user_id):
+            raise ValueError("Unknown user_id")
 
         interview = self.database.create_interview(
             user_id=user_id,
@@ -67,9 +80,9 @@ class InterviewService:
         question_id: str,
         answer_text: str = "",
         answer_mode: str = "text",
-        skipped: bool = False,
         audio_file_path: str | None = None,
         video_file_path: str | None = None,
+        skipped: bool = False,
     ) -> dict[str, Any]:
         session = self._require_session(session_id)
         question = self.database.get_question(session_id, question_id)
@@ -79,10 +92,11 @@ class InterviewService:
             raise ValueError("Interview session is already completed")
         if answer_mode not in {"text", "audio", "video", "audio_video"}:
             raise ValueError("Unsupported answer mode")
-        if skipped and (answer_text.strip() or audio_file_path or video_file_path):
-            raise ValueError("A skipped question cannot include an answer or media")
+        # skipped=True (the web client's "nothing was captured for this question" signal) is the
+        # one case where an empty answer with no media is allowed through instead of rejected.
         if not skipped and not answer_text.strip() and not (audio_file_path or video_file_path):
             raise ValueError("Answer text or media is required")
+        # Idempotent: the web client re-sends the last answer when it ends the interview.
         return self.database.save_response(
             interview_id=session_id,
             question_id=question_id,
@@ -94,17 +108,12 @@ class InterviewService:
 
     def results(self, session_id: str) -> dict[str, Any]:
         session = self._require_session(session_id)
-        responses = self.database.list_responses(session_id)
-        for response in responses:
-            if response["evaluation_id"] is None:
-                evaluation = self._evaluate(response, session)
-                self.database.save_evaluation(response["id"], **evaluation)
-
-        result = self.database.get_results(session_id)
+        pending = [r for r in self.database.list_responses(session_id) if r["evaluation_id"] is None]
+        for response, evaluation in zip(pending, self._evaluate_many(pending, session)):
+            self.database.save_evaluation(response["id"], **evaluation)
         if session["status"] == "in_progress":
             self.database.complete_interview(session_id)
-            result = self.database.get_results(session_id)
-        return result
+        return self.database.get_results(session_id)
 
     def _build_questions(
         self,
@@ -114,7 +123,8 @@ class InterviewService:
         question_count: int,
         focus_areas: list[str] | None,
     ) -> tuple[list[str], str]:
-        if os.getenv("AI_API_KEY") or os.getenv("GEMINI_API_KEY"):
+        """AI first; then the 750-question bank; then a tiny built-in list."""
+        if ai_configured():
             try:
                 if self._question_generator is None:
                     self._question_generator = QuestionGenerator()
@@ -127,44 +137,59 @@ class InterviewService:
                 )
                 if len(questions) >= question_count:
                     return questions[:question_count], "ai"
-            except (ValueError, KeyError, TypeError):
-                pass
+                logger.warning("AI returned %d of %d questions; using the question bank", len(questions), question_count)
+            except (ValueError, KeyError, TypeError) as exc:
+                logger.warning("AI question generation failed (%s); using the question bank", exc)
 
-        questions = [
-            f"{question} for a {job_role} candidate."
-            if "role" in question.lower()
-            else question
-            for question in FALLBACK_QUESTIONS
-        ]
+        questions = pick_questions(self.database, job_role, interview_type, question_count)
+        if len(questions) >= question_count:
+            return questions, "bank"
+
+        for template in FALLBACK_QUESTIONS:
+            question = template.format(role=job_role)
+            if len(questions) < question_count and question not in questions:
+                questions.append(question)
         while len(questions) < question_count:
             questions.append(
                 f"Describe a project or decision that demonstrates your readiness for {job_role}."
             )
-        return questions[:question_count], "local"
+        return questions, "local"
+
+    def _evaluate_many(self, responses: list[dict[str, Any]], session: dict[str, Any]) -> list[dict[str, Any]]:
+        """Evaluate answers; AI calls run in parallel (they are network-bound and touch no database)."""
+        if len(responses) > 1 and ai_configured():
+            self._get_evaluator()  # build once on this thread
+            with ThreadPoolExecutor(max_workers=min(len(responses), MAX_PARALLEL_EVALUATIONS)) as pool:
+                return list(pool.map(lambda response: self._evaluate(response, session), responses))
+        return [self._evaluate(response, session) for response in responses]
+
+    def _get_evaluator(self) -> AnswerEvaluator:
+        if self._evaluator is None:
+            self._evaluator = AnswerEvaluator()
+        return self._evaluator
 
     def _evaluate(self, response: dict[str, Any], session: dict[str, Any]) -> dict[str, Any]:
-        if response["answer_mode"] == "text" and not response["answer_text"].strip():
+        if not response["answer_text"].strip():
             return {
                 "score": 0.0,
                 "strengths": [],
-                "weaknesses": ["Question skipped; no answer was evaluated."],
+                "weaknesses": ["No answer was provided for this question."],
                 "feedback": "This question was skipped.",
-                "recommendation": "Answer the question to receive feedback.",
+                "recommendation": "Answer every question to get a complete evaluation.",
                 "raw": {"source": "skipped"},
             }
-        if response["answer_text"].strip() and (os.getenv("AI_API_KEY") or os.getenv("GEMINI_API_KEY")):
+
+        if ai_configured():
             try:
-                if self._evaluator is None:
-                    self._evaluator = AnswerEvaluator()
-                evaluation = self._evaluator.evaluate_answer(
+                evaluation = self._get_evaluator().evaluate_answer(
                     question=response["question_text"],
                     candidate_answer=response["answer_text"],
                     job_role=session["job_role"],
                     experience_level=session["experience_level"],
                 )
                 return self._normalise_evaluation(evaluation)
-            except (ValueError, KeyError, TypeError):
-                pass
+            except (ValueError, KeyError, TypeError) as exc:
+                logger.warning("AI evaluation failed (%s); using local scoring", exc)
 
         answer_length = len(response["answer_text"].strip())
         score = min(10.0, max(2.0, round(2 + answer_length / 80, 2)))
@@ -185,7 +210,7 @@ class InterviewService:
             "weaknesses": evaluation.get("weaknesses") or [],
             "feedback": str(evaluation.get("feedback") or ""),
             "recommendation": str(evaluation.get("recommendation") or ""),
-            "raw": evaluation,
+            "raw": {"source": "ai", **evaluation},
         }
 
     def _require_session(self, session_id: str) -> dict[str, Any]:
@@ -195,4 +220,4 @@ class InterviewService:
         return session
 
 
-__all__ = ["InterviewService"]
+__all__ = ["InterviewService", "ai_configured"]

@@ -19,6 +19,10 @@ class SessionService:
     def list_for_user(self, user_id: str) -> list[dict[str, Any]]:
         return self.database.list_interviews(user_id)
 
+    def summaries_for_user(self, user_id: str) -> list[dict[str, Any]]:
+        """History/dashboard rows: counts and average score per interview."""
+        return self.database.list_interview_summaries(user_id)
+
     def complete(self, session_id: str) -> dict[str, Any]:
         session = self.database.get_interview(session_id)
         if not session:

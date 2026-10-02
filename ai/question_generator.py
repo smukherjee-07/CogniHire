@@ -42,7 +42,8 @@ class QuestionGenerator:
         if isinstance(payload, list):
             return [str(item).strip() for item in payload if str(item).strip()]
 
-        raise ValueError("AI response did not contain a valid question list.")
+        detail = response.get("error_message") if isinstance(response, dict) else ""
+        raise ValueError(detail or "AI response did not contain a valid question list.")
 
     def generate_question_bank(
         self,

@@ -33,6 +33,13 @@ def _now() -> str:
 	return datetime.now(timezone.utc).isoformat()
 
 
+def _loads(value: str | None, default: Any) -> Any:
+	try:
+		return json.loads(value) if value else default
+	except (TypeError, ValueError):
+		return default
+
+
 def _hash_password(password: str, salt: str | None = None) -> str:
 	salt = salt or secrets.token_hex(16)
 	digest = hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), 120_000)
@@ -90,6 +97,9 @@ class Database:
 			(username.strip(),),
 		)
 
+	def get_user(self, user_id: str) -> dict[str, Any] | None:
+		return self._one("SELECT id, username, email, created_at FROM users WHERE id = ?", (user_id,))
+
 	def create_user(self, username: str, password: str, email: str | None = None) -> dict[str, Any]:
 		user_id = str(uuid.uuid4())
 		self.connection.execute("INSERT INTO users (id, username, email, password_hash) VALUES (?, ?, ?, ?)", (user_id, username.strip(), email.strip() if email else None, _hash_password(password)))
@@ -143,12 +153,18 @@ class Database:
 		]
 
 	def save_response(self, interview_id: str, question_id: str, answer_text: str = "", answer_mode: str = "text", audio_file_path: str | None = None, video_file_path: str | None = None) -> dict[str, Any]:
-		response_id = str(uuid.uuid4())
-		self.connection.execute("INSERT INTO responses (id, interview_id, question_id, answer_text, answer_mode) VALUES (?, ?, ?, ?, ?)", (response_id, interview_id, question_id, answer_text, answer_mode))
-		uploads = [(audio_file_path, "audio"), (video_file_path, "video")]
-		self.connection.executemany("INSERT INTO media_uploads (id, response_id, media_type, file_path) VALUES (?, ?, ?, ?)", [(str(uuid.uuid4()), response_id, kind, path) for path, kind in uploads if path])
+		"""Save an answer. Submitting the same question again updates it instead of failing (idempotent)."""
+		self.connection.execute(
+			"INSERT INTO responses (id, interview_id, question_id, answer_text, answer_mode) VALUES (?, ?, ?, ?, ?) "
+			"ON CONFLICT(interview_id, question_id) DO UPDATE SET answer_text = excluded.answer_text, answer_mode = excluded.answer_mode",
+			(str(uuid.uuid4()), interview_id, question_id, answer_text, answer_mode),
+		)
+		response = self._one("SELECT * FROM responses WHERE interview_id = ? AND question_id = ?", (interview_id, question_id)) or {}
+		for path, kind in ((audio_file_path, "audio"), (video_file_path, "video")):
+			if path and not self._one("SELECT 1 FROM media_uploads WHERE response_id = ? AND media_type = ? AND file_path = ?", (response["id"], kind, path)):
+				self.connection.execute("INSERT INTO media_uploads (id, response_id, media_type, file_path) VALUES (?, ?, ?, ?)", (str(uuid.uuid4()), response["id"], kind, path))
 		self.connection.commit()
-		return self._one("SELECT * FROM responses WHERE id = ?", (response_id,)) or {}
+		return response
 
 	def save_evaluation(self, response_id: str, score: float, strengths: list[str] | None = None, weaknesses: list[str] | None = None, feedback: str = "", recommendation: str = "", raw: Any = None) -> dict[str, Any]:
 		evaluation_id = str(uuid.uuid4())
@@ -162,12 +178,49 @@ class Database:
 
 	def get_results(self, interview_id: str) -> dict[str, Any]:
 		interview = self._one("SELECT * FROM interviews WHERE id = ?", (interview_id,))
-		rows = [dict(row) for row in self.connection.execute("SELECT q.*, r.id AS response_id, r.answer_text, r.answer_mode, e.score, e.strengths_json, e.weaknesses_json, e.feedback, e.recommendation FROM questions q LEFT JOIN responses r ON r.question_id = q.id LEFT JOIN evaluations e ON e.response_id = r.id WHERE q.interview_id = ? ORDER BY q.question_number", (interview_id,))]
+		rows = []
+		for row in self.connection.execute("SELECT q.*, r.id AS response_id, r.answer_text, r.answer_mode, e.score, e.strengths_json, e.weaknesses_json, e.feedback, e.recommendation, e.raw_json FROM questions q LEFT JOIN responses r ON r.question_id = q.id LEFT JOIN evaluations e ON e.response_id = r.id WHERE q.interview_id = ? ORDER BY q.question_number", (interview_id,)):
+			item = dict(row)
+			item["strengths"] = _loads(item["strengths_json"], [])
+			item["weaknesses"] = _loads(item["weaknesses_json"], [])
+			raw = _loads(item.pop("raw_json"), {})
+			item["evaluation_source"] = raw.get("source") if isinstance(raw, dict) else None
+			rows.append(item)
 		scores = [row["score"] for row in rows if row["score"] is not None]
-		return {"session": interview, "responses": rows, "score": round(sum(scores) / len(scores), 2) if scores else 0}
+		return {
+			"session": interview,
+			"responses": rows,
+			"score": round(sum(scores) / len(scores), 2) if scores else 0,
+			"questions_total": len(rows),
+			"questions_answered": sum(1 for row in rows if row["response_id"]),
+		}
 
 	def list_interviews(self, user_id: str) -> list[dict[str, Any]]:
 		return [dict(row) for row in self.connection.execute("SELECT * FROM interviews WHERE user_id = ? ORDER BY started_at DESC", (user_id,))]
+
+
+	def list_interview_summaries(self, user_id: str) -> list[dict[str, Any]]:
+		"""Dashboard/history rows (question and answer counts, average score) from v_interview_summary."""
+		return [dict(row) for row in self.connection.execute("SELECT * FROM v_interview_summary WHERE user_id = ? ORDER BY started_at DESC", (user_id,))]
+
+	def question_bank_roles(self) -> list[str]:
+		return [row[0] for row in self.connection.execute("SELECT DISTINCT job_role FROM question_bank ORDER BY job_role")]
+
+	def question_bank_texts(self, categories: Iterable[str], job_role: str | None = None) -> dict[str, list[str]]:
+		"""Distinct question texts per category, for one bank role or (job_role=None) across all roles."""
+		categories = list(categories)
+		query = f"SELECT category, question_text FROM question_bank WHERE category IN ({','.join('?' * len(categories))})"
+		parameters: list[Any] = list(categories)
+		if job_role:
+			query += " AND job_role = ? COLLATE NOCASE"
+			parameters.append(job_role)
+		result: dict[str, list[str]] = {category: [] for category in categories}
+		seen: set[tuple[str, str]] = set()
+		for category, text in self.connection.execute(query + " ORDER BY id", parameters):
+			if (category, text) not in seen:
+				seen.add((category, text))
+				result[category].append(text)
+		return result
 
 
 def get_database(path: str | Path | None = None) -> Database:

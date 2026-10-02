@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
@@ -10,13 +12,21 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from backend.auth import authenticate_user, get_or_create_demo_user, register_user
-from backend.interview import InterviewService
+from ai.api import DEFAULT_MODEL
+from backend.interview import InterviewService, ai_configured
+from backend.session import SessionService
 from database.database import get_database
 
 
 WEB_DIR = Path(__file__).resolve().parent / "web"
 
-app = FastAPI(title="CogniHire API")
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+	get_database().close()  # create/verify the SQLite schema once at startup, before any request arrives
+	yield
+
+
+app = FastAPI(title="CogniHire API", lifespan=lifespan)
 app.add_middleware(
 	CORSMiddleware,
 	allow_origins=["*"],
@@ -31,10 +41,15 @@ def frontend() -> FileResponse:
 	return FileResponse(WEB_DIR / "index.html")
 
 
-app.mount("/assets", StaticFiles(directory=WEB_DIR / "assets"), name="assets")
-app.mount("/css", StaticFiles(directory=WEB_DIR / "css"), name="css")
-app.mount("/js", StaticFiles(directory=WEB_DIR / "js"), name="js")
-app.mount("/media", StaticFiles(directory=WEB_DIR), name="media")
+# Only mount folders that exist (git does not track empty folders such as web/assets).
+for mount_path, directory in (
+	("/assets", WEB_DIR / "assets"),
+	("/css", WEB_DIR / "css"),
+	("/js", WEB_DIR / "js"),
+	("/media", WEB_DIR),
+):
+	if directory.is_dir():
+		app.mount(mount_path, StaticFiles(directory=directory), name=mount_path.strip("/"))
 
 
 class InterviewRequest(BaseModel):
@@ -50,9 +65,9 @@ class ResponseRequest(BaseModel):
 	question_id: str = Field(min_length=1)
 	answer_text: str = ""
 	answer_mode: str = "text"
-	skipped: bool = False
 	audio_file_path: str | None = None
 	video_file_path: str | None = None
+	skipped: bool = False
 
 
 class AuthRequest(BaseModel):
@@ -62,8 +77,8 @@ class AuthRequest(BaseModel):
 
 
 @app.get("/api/health")
-def health() -> dict[str, str]:
-	return {"status": "ok"}
+def health() -> dict[str, Any]:
+	return {"status": "ok", "ai_configured": ai_configured(), "ai_model": os.getenv("AI_MODEL") or DEFAULT_MODEL}
 
 
 @app.post("/api/auth/register", status_code=201)
@@ -101,6 +116,14 @@ def start_interview(request: InterviewRequest) -> dict[str, Any]:
 			raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
+@app.get("/api/interviews")
+def list_interviews(user_id: str | None = None) -> dict[str, Any]:
+	"""History/dashboard data for one user (the shared demo user when user_id is omitted)."""
+	with get_database() as database:
+		user_id = user_id or get_or_create_demo_user(database)["id"]
+		return {"user_id": user_id, "interviews": SessionService(database).summaries_for_user(user_id)}
+
+
 @app.get("/api/interviews/{session_id}/next-question")
 def next_question(session_id: str) -> dict[str, Any]:
 	with get_database() as database:
@@ -126,9 +149,9 @@ def submit_response(session_id: str, request: ResponseRequest) -> dict[str, Any]
 				question_id=request.question_id,
 				answer_text=request.answer_text,
 				answer_mode=request.answer_mode,
-				skipped=request.skipped,
 				audio_file_path=request.audio_file_path,
 				video_file_path=request.video_file_path,
+				skipped=request.skipped,
 			)
 		except (ValueError, KeyError) as exc:
 			raise HTTPException(status_code=400, detail=str(exc)) from exc

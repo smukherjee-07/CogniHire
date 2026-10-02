@@ -4,8 +4,8 @@
 
 **AI-Powered Mock Interview & Candidate Evaluation Platform**
 
-[![Python](https://img.shields.io/badge/Python-3.8%2B-blue?logo=python&logoColor=white)](https://www.python.org/)
-[![FastAPI](https://img.shields.io/badge/Backend-FastAPI%20%7C%20Flask-009688?logo=fastapi&logoColor=white)]()
+[![Python](https://img.shields.io/badge/Python-3.10%2B-blue?logo=python&logoColor=white)](https://www.python.org/)
+[![FastAPI](https://img.shields.io/badge/Backend-FastAPI-009688?logo=fastapi&logoColor=white)]()
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Web-lightgrey)]()
 
@@ -21,8 +21,8 @@
 - [Requirements](#-requirements)
 - [Installation](#-installation)
   - [1. Clone the Repository](#1-clone-the-repository)
-  - [2. Launch the Frontend](#2-launch-the-frontend)
-  - [3. Set Up the Backend](#3-set-up-the-backend)
+  - [2. Set Up the Backend](#2-set-up-the-backend)
+  - [3. Open the App](#3-open-the-app)
 - [Usage](#️-usage)
 - [Project Structure](#️-project-structure)
 - [Troubleshooting](#️-troubleshooting)
@@ -55,9 +55,9 @@ CogniHire is an intelligent mock interview platform designed to bridge the gap i
 | Layer | Technology |
 |---|---|
 | **Frontend** | HTML5, CSS3, Vanilla JavaScript, WebRTC |
-| **Backend** | FastAPI / Flask (Python) |
-| **AI & NLP** | Google Gemini API, OpenAI API |
-| **Database** | SQLite / MySQL |
+| **Backend** | FastAPI (Python) |
+| **AI & NLP** | Google Gemini API |
+| **Database** | SQLite |
 
 ---
 
@@ -65,7 +65,7 @@ CogniHire is an intelligent mock interview platform designed to bridge the gap i
 
 | Tool | Purpose |
 |---|---|
-| [Python 3.8+](https://www.python.org/downloads/) | Runs the backend server |
+| [Python 3.10+](https://www.python.org/downloads/) | Runs the backend server |
 | Modern Browser (Chrome/Edge) | Webcam & microphone permissions required |
 | [Git](https://git-scm.com/) | Clones the repository |
 
@@ -80,20 +80,7 @@ git clone https://github.com/yourusername/cognihire.git
 cd cognihire
 ```
 
-### 2. Launch the Frontend
-
-<details>
-<summary><strong>Windows / Linux / macOS</strong></summary>
-
-```bash
-cd web
-python -m http.server 8080
-```
-
-Then open your browser and navigate to `http://localhost:8080` to view the login screen.
-</details>
-
-### 3. Set Up the Backend
+### 2. Set Up the Backend
 
 <details>
 <summary><strong>Windows</strong></summary>
@@ -115,7 +102,12 @@ python3 app.py
 ```
 </details>
 
-> ⚠️ Copy `.env.example` to `.env` and fill in your Google Gemini / OpenAI API keys before starting the backend.
+> ⚠️ Copy `.env.example` to `.env` and put your Google Gemini key in `AI_API_KEY`. Without a key the app still runs: questions come from the built-in question bank and answers get simple local scoring.
+
+### 3. Open the App
+
+The backend also serves the frontend, so there is nothing else to start. Open `http://127.0.0.1:8000` in Chrome or Edge.
+Check `http://127.0.0.1:8000/api/health` to confirm the server is up and whether the AI key was picked up (`ai_configured`). API reference: [docs/api.md](docs/api.md).
 
 ---
 
@@ -123,11 +115,12 @@ python3 app.py
 
 | Step | Action |
 |---|---|
-| 1 | Start the backend server (see [Set Up the Backend](#3-set-up-the-backend)) |
-| 2 | Start the frontend server (see [Launch the Frontend](#2-launch-the-frontend)) |
-| 3 | Open `http://localhost:8080` and log in |
-| 4 | Select your target career path and enter the mock interview |
-| 5 | Review your AI-generated report card once the session ends |
+| 1 | Start the backend server (see [Set Up the Backend](#2-set-up-the-backend)); it also serves the web app |
+| 2 | Open `http://127.0.0.1:8000` and log in |
+| 3 | Select your target career path and enter the mock interview |
+| 4 | Review your AI-generated report card once the session ends |
+
+Run the tests with `python -m pytest -q` (the HTTP tests need `pip install -r requirements.txt`).
 
 ---
 
@@ -145,7 +138,9 @@ CogniHire/
 │
 ├── backend/
 │   ├── __init__.py
+│   ├── auth.py
 │   ├── interview.py
+│   ├── question_bank.py
 │   └── session.py
 │
 ├── data/
@@ -153,6 +148,7 @@ CogniHire/
 ├── database/
 │   ├── cognihire.db
 │   ├── database.py
+│   ├── queries.sql
 │   ├── schema.sql
 │   └── seed.sql
 │
@@ -171,10 +167,12 @@ CogniHire/
 │
 ├── tests/
 │   ├── __init__.py
+│   ├── helpers.py
 │   ├── test_ai.py
 │   ├── test_backend.py
 │   ├── test_database.py
 │   ├── test_interview_flow.py
+│   ├── test_question_bank.py
 │   └── test_speech_video.py
 │
 ├── web/
@@ -188,6 +186,7 @@ CogniHire/
 │   ├── js/
 │   │   ├── api.js
 │   │   ├── app.js
+│   │   ├── auth.js
 │   │   ├── dashboard.js
 │   │   ├── history.js
 │   │   ├── interview.js
@@ -215,6 +214,7 @@ CogniHire/
 | Webcam/mic not detected | Grant browser permissions and confirm no other app is using the device. |
 | AI avatar unresponsive | Check that Gemini/OpenAI API keys are set correctly in `.env`. |
 | Backend fails to start | Re-run `pip install -r requirements.txt` in the correct Python environment. |
+| Questions/scores look generic | Open `/api/health`: if `ai_configured` is `false`, the key is missing; if `true`, look for `AI ... failed` lines in the server log (wrong model name, quota) - the app falls back to the question bank and local scoring. |
 | Blank report card | Ensure the interview session ran to completion before ending it. |
 
 ---

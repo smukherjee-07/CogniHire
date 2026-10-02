@@ -1,12 +1,8 @@
 fastapi
 uvicorn
-sqlalchemy
 pydantic
 python-dotenv
 python-multipart
+requests
 pytest
 httpx
-google-genai
-pydantic
-python-dotenv
-pytest

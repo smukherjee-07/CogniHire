@@ -5,3 +5,10 @@ __pycache__/
 !.env.example
 .venv/
 venv/
+
+# local SQLite database - recreated automatically from database/schema.sql on first run
+*.db
+*.db-wal
+*.db-shm
+data/audio/
+data/video/
