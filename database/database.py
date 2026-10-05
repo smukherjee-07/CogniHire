@@ -83,6 +83,22 @@ class Database:
 			("users", "interviews", "question_bank"),
 		).fetchall()
 		if len(tables) == 3:
+			version = self.connection.execute("PRAGMA user_version").fetchone()[0]
+			if version < 1:
+				self.connection.executescript(
+					"DROP VIEW IF EXISTS v_interview_summary; "
+					"CREATE VIEW v_interview_summary AS "
+					"SELECT i.id AS interview_id, i.user_id, u.username, i.job_role, i.interview_type, "
+					"i.experience_level, i.question_count, i.status, i.started_at, i.completed_at, "
+					"COUNT(DISTINCT q.id) AS questions_created, "
+					"COUNT(DISTINCT CASE WHEN TRIM(r.answer_text) <> '' THEN r.id END) AS responses_submitted, "
+					"ROUND(AVG(e.score), 2) AS average_score "
+					"FROM interviews i JOIN users u ON u.id = i.user_id "
+					"LEFT JOIN questions q ON q.interview_id = i.id "
+					"LEFT JOIN responses r ON r.interview_id = i.id "
+					"LEFT JOIN evaluations e ON e.response_id = r.id "
+					"GROUP BY i.id; PRAGMA user_version = 1;"
+				)
 			return
 		self.connection.executescript(SCHEMA_PATH.read_text(encoding="utf-8"))
 		self.connection.commit()
@@ -136,6 +152,20 @@ class Database:
 			(interview_id, question_id),
 		)
 
+	def ensure_empty_responses(self, interview_id: str) -> None:
+		"""Create skipped response rows for questions with no submitted response."""
+		questions = self.connection.execute(
+			"SELECT q.id FROM questions q LEFT JOIN responses r ON r.question_id = q.id "
+			"WHERE q.interview_id = ? AND r.id IS NULL",
+			(interview_id,),
+		).fetchall()
+		if questions:
+			self.connection.executemany(
+				"INSERT INTO responses (id, interview_id, question_id, answer_text, answer_mode) VALUES (?, ?, ?, '', 'text')",
+				[(str(uuid.uuid4()), interview_id, question["id"]) for question in questions],
+			)
+			self.connection.commit()
+
 	def list_responses(self, interview_id: str) -> list[dict[str, Any]]:
 		return [
 			dict(row)
@@ -166,8 +196,10 @@ class Database:
 		self.connection.commit()
 		return response
 
-	def save_evaluation(self, response_id: str, score: float, strengths: list[str] | None = None, weaknesses: list[str] | None = None, feedback: str = "", recommendation: str = "", raw: Any = None) -> dict[str, Any]:
+	def save_evaluation(self, response_id: str, score: float, strengths: list[str] | None = None, weaknesses: list[str] | None = None, feedback: str = "", recommendation: str = "", ideal_answer: str = "", raw: Any = None) -> dict[str, Any]:
 		evaluation_id = str(uuid.uuid4())
+		if ideal_answer and isinstance(raw, dict):
+			raw = {**raw, "ideal_answer": ideal_answer}
 		self.connection.execute("INSERT OR REPLACE INTO evaluations (id, response_id, score, strengths_json, weaknesses_json, feedback, recommendation, raw_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", (evaluation_id, response_id, score, json.dumps(strengths or []), json.dumps(weaknesses or []), feedback, recommendation, json.dumps(raw) if raw is not None else None))
 		self.connection.commit()
 		return self._one("SELECT * FROM evaluations WHERE response_id = ?", (response_id,)) or {}
@@ -185,6 +217,7 @@ class Database:
 			item["weaknesses"] = _loads(item["weaknesses_json"], [])
 			raw = _loads(item.pop("raw_json"), {})
 			item["evaluation_source"] = raw.get("source") if isinstance(raw, dict) else None
+			item["ideal_answer"] = raw.get("ideal_answer", raw.get("suggested_answer", "")) if isinstance(raw, dict) else ""
 			rows.append(item)
 		scores = [row["score"] for row in rows if row["score"] is not None]
 		return {
@@ -192,7 +225,7 @@ class Database:
 			"responses": rows,
 			"score": round(sum(scores) / len(scores), 2) if scores else 0,
 			"questions_total": len(rows),
-			"questions_answered": sum(1 for row in rows if row["response_id"]),
+			"questions_answered": sum(1 for row in rows if (row["answer_text"] or "").strip()),
 		}
 
 	def list_interviews(self, user_id: str) -> list[dict[str, Any]]:

@@ -2,7 +2,7 @@
    COGNIHIRE - API Contract & Communication (api.js)
    ========================================================================== */
 
-const API_BASE_URL = 'http://localhost:8000/api'; // Update to your backend URL
+const API_BASE_URL = `${window.location.origin}/api`;
 
 const API = {
     // 1. Initialize Session
@@ -42,8 +42,21 @@ const API = {
     // 4. Get Final Results
     async getResults(session_id) {
         const response = await fetch(`${API_BASE_URL}/interviews/${session_id}/results`);
-        if (!response.ok) throw new Error(`Unable to load results (${response.status})`);
+        if (!response.ok) {
+            const error = await response.json().catch(() => null);
+            throw new Error(error?.detail || `Unable to load results (${response.status})`);
+        }
         // Returns aggregated FINAL RESULT and AI EVALUATION objects
+        return await response.json();
+    },
+
+    async evaluatePresence(session_id, image_data_url) {
+        const response = await fetch(`${API_BASE_URL}/interviews/${session_id}/presence`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ image_data_url })
+        });
+        if (!response.ok) throw new Error(`Unable to assess attire (${response.status})`);
         return await response.json();
     }
 };

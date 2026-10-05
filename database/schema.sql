@@ -859,7 +859,7 @@ SELECT
 	i.id AS interview_id, i.user_id, u.username, i.job_role, i.interview_type,
 	i.experience_level, i.question_count, i.status, i.started_at, i.completed_at,
 	COUNT(DISTINCT q.id) AS questions_created,
-	COUNT(DISTINCT r.id) AS responses_submitted,
+	COUNT(DISTINCT CASE WHEN TRIM(r.answer_text) <> '' THEN r.id END) AS responses_submitted,
 	ROUND(AVG(e.score), 2) AS average_score
 FROM interviews i
 JOIN users u ON u.id = i.user_id
@@ -867,6 +867,8 @@ LEFT JOIN questions q ON q.interview_id = i.id
 LEFT JOIN responses r ON r.interview_id = i.id
 LEFT JOIN evaluations e ON e.response_id = r.id
 GROUP BY i.id;
+
+PRAGMA user_version = 1;
 
 CREATE VIEW IF NOT EXISTS v_interview_answers AS
 SELECT

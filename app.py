@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import base64
+import binascii
 import os
+import re
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
@@ -38,7 +41,7 @@ app.add_middleware(
 
 @app.get("/", include_in_schema=False)
 def frontend() -> FileResponse:
-	return FileResponse(WEB_DIR / "index.html")
+	return FileResponse(WEB_DIR / "index.html", headers={"Cache-Control": "no-store, must-revalidate"})
 
 
 # Only mount folders that exist (git does not track empty folders such as web/assets).
@@ -68,6 +71,10 @@ class ResponseRequest(BaseModel):
 	audio_file_path: str | None = None
 	video_file_path: str | None = None
 	skipped: bool = False
+
+
+class PresenceRequest(BaseModel):
+	image_data_url: str = Field(min_length=1, max_length=3_500_000)
 
 
 class AuthRequest(BaseModel):
@@ -165,6 +172,8 @@ def interview_results(session_id: str) -> dict[str, Any]:
 			result = InterviewService(database).results(session_id)
 		except ValueError as exc:
 			raise HTTPException(status_code=404, detail=str(exc)) from exc
+		except RuntimeError as exc:
+			raise HTTPException(status_code=502, detail=str(exc)) from exc
 		return {
 			"final_result": result,
 			"ai_evaluation": {
@@ -172,6 +181,31 @@ def interview_results(session_id: str) -> dict[str, Any]:
 				"responses": result["responses"],
 			},
 		}
+
+
+@app.post("/api/interviews/{session_id}/presence")
+def interview_presence(session_id: str, request: PresenceRequest) -> dict[str, str]:
+	match = re.fullmatch(r"data:(image/(?:jpeg|png|webp));base64,([A-Za-z0-9+/]+={0,2})", request.image_data_url)
+	if not match:
+		raise HTTPException(status_code=400, detail="A base64 JPEG, PNG, or WebP camera image is required")
+	image_mime_type, encoded_image = match.groups()
+	try:
+		image_bytes = base64.b64decode(encoded_image, validate=True)
+	except (binascii.Error, ValueError) as exc:
+		raise HTTPException(status_code=400, detail="Camera image data is invalid") from exc
+	if not image_bytes or len(image_bytes) > 2_500_000:
+		raise HTTPException(status_code=413, detail="Camera image must be smaller than 2.5 MB")
+	with get_database() as database:
+		try:
+			return InterviewService(database).evaluate_presence(
+				session_id=session_id,
+				image_mime_type=image_mime_type,
+				image_data=encoded_image,
+			)
+		except ValueError as exc:
+			raise HTTPException(status_code=404, detail=str(exc)) from exc
+		except RuntimeError as exc:
+			raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
 if __name__ == "__main__":

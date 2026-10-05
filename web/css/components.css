@@ -298,44 +298,6 @@
     font-weight: 500;
 }
 
-/* Attire Scanner Animation */
-.attire-scanner {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    pointer-events: none;
-    z-index: 10;
-}
-
-.scanner-line {
-    width: 100%;
-    height: 3px;
-    background: var(--accent-color);
-    box-shadow: 0 0 15px var(--accent-color), 0 0 30px var(--accent-color);
-    position: absolute;
-    animation: scan 2.5s cubic-bezier(0.4, 0, 0.2, 1) infinite alternate;
-}
-
-@keyframes scan {
-    0% { top: 0; opacity: 0; }
-    10% { opacity: 1; }
-    90% { opacity: 1; }
-    100% { top: 100%; opacity: 0; }
-}
-
-.scanning-text {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    background: rgba(15, 118, 110, 0.8);
-    padding: 0.5rem 1rem;
-    border-radius: 20px;
-    font-size: 0.875rem;
-}
-
 /* Audio Visualizer */
 .controls-area {
     grid-column: 1 / -1;
@@ -386,6 +348,8 @@
     color: #cbd5e1;
 }
 .question-prompt { display: block; margin-bottom: 0.55rem; color: #f8fafc; font-style: normal; font-weight: 600; }
+.answer-input-label { display: block; margin: 0.9rem 0 0.35rem; color: #f8fafc; font-size: 0.85rem; font-weight: 600; }
+.answer-input { min-height: 6rem; resize: vertical; color: var(--text-primary); }
 
 .speech-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem; }
 .speech-controls .btn { padding: 0.55rem 0.75rem; font-size: 0.8rem; }
@@ -402,6 +366,13 @@
 
 .tab-content { display: none; animation: fadeIn 0.4s ease; }
 .tab-content.active { display: block; }
+.response-review-item { padding: 1rem 0; border-bottom: 1px solid var(--border-color, #cbd5e1); }
+.response-review-item:last-child { border-bottom: 0; }
+.response-review-item h3 { margin-bottom: 0.75rem; }
+.response-review-label { display: block; font-weight: 700; margin-bottom: 0.35rem; }
+.response-review-answer, .response-review-suggestion { padding: 0.85rem 1rem; border-radius: 6px; margin: 0.5rem 0 0.75rem; white-space: pre-wrap; }
+.response-review-answer { background: var(--background-color); color: var(--text-secondary); border-left: 4px solid var(--text-secondary); }
+.response-review-suggestion { background: rgba(16, 185, 129, 0.08); color: var(--text-primary); border-left: 4px solid var(--success-color); }
 
 /* Result specifics */
 .score-circle { width: 120px; height: 120px; border-radius: 50%; border: 8px solid var(--primary-color); display: flex; align-items: center; justify-content: center; font-size: 2rem; font-weight: 700; color: var(--primary-color); margin: 0 auto 2rem; }

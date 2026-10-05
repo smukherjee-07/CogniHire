@@ -178,11 +178,6 @@
                         <div class="video-label">You</div>
                         <div id="media-status" class="media-status" role="status">Requesting camera and microphone...</div>
                         
-                        <!-- Attire Scanner Overlay -->
-                        <div id="attire-scanner" class="attire-scanner">
-                            <div class="scanner-line"></div>
-                            <div class="scanning-text">Analyzing Professional Presence...</div>
-                        </div>
                     </div>
                 </div>
 
@@ -199,6 +194,8 @@
                     <div class="transcript-box">
                         <span class="question-prompt" id="question-prompt">Question 1: Tell me about a project you are proud of.</span>
                         <span class="transcript-label">Live transcript</span><span id="transcript-text">Your spoken answer will appear here.</span>
+                        <label class="answer-input-label" for="answer-input">Type your answer</label>
+                        <textarea id="answer-input" class="form-control answer-input" rows="4" placeholder="Enter your answer here..."></textarea>
                     </div>
                     <div class="speech-controls" aria-label="Question voice controls">
                         <span class="control-caption">Question voice</span>
@@ -215,7 +212,7 @@
                     </div>
                     <button id="next-question-btn" class="btn btn-primary" type="button">Next question →</button>
                     <button id="record-btn" class="btn btn-secondary" type="button">Start recording</button>
-                    <button onclick="endInterview()" class="btn btn-danger">End & Submit</button>
+                    <button id="end-interview-btn" onclick="endInterview()" class="btn btn-danger">End & Submit</button>
                 </div>
             </div>
         </div>
@@ -261,15 +258,7 @@
 
                     <!-- Tab 2: Detailed Review -->
                     <div id="pane-detailed" class="tab-content">
-                        <h3>Question 1: Algorithm Optimization</h3>
-                        <div style="background: #f8fafc; padding: 15px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid var(--text-secondary);">
-                            <strong>Your Answer:</strong><br>
-                            <span style="font-style: italic; color: var(--text-secondary);">"I recently worked on a project where..."</span>
-                        </div>
-                        <div style="background: #f0fdfa; padding: 15px; border-radius: 8px; border-left: 4px solid var(--success-color);">
-                            <strong>AI Suggested Answer:</strong><br>
-                            <span style="color: #0f766e;">"In my previous role, I optimized a search algorithm by reducing its time complexity from O(n^2) to O(n log n), resulting in a 40% speed increase in data retrieval."</span>
-                        </div>
+                        <div id="report-responses"></div>
                     </div>
 
                     <!-- Tab 3: Professional Presence (Attire) -->
@@ -278,7 +267,7 @@
                         <div style="display: flex; align-items: center; gap: 20px; margin-top: 20px;">
                             <div style="flex: 1; padding: 20px; background: rgba(56, 189, 248, 0.1); border-radius: 12px; border: 1px solid rgba(56, 189, 248, 0.3);">
                                 <h4>Visual Feedback</h4>
-                                <p id="attire-feedback">Excellent professional attire. Your choice of clothing perfectly matches the selected corporate role, projecting confidence and professionalism.</p>
+                                <p id="attire-feedback">Attire has not been assessed.</p>
                             </div>
                         </div>
                     </div>
@@ -293,11 +282,11 @@
     </div>
 
     <!-- Link JS files (Order matters) -->
-    <script src="js/api.js"></script>
+    <script src="js/api.js?v=20261005-ideal-review"></script>
     <script src="js/theme.js"></script>
-    <script src="js/media.js"></script>
-    <script src="js/interview.js"></script>
-    <script src="js/results.js"></script>
+    <script src="js/media.js?v=20261005-speech-network-diagnostics"></script>
+    <script src="js/interview.js?v=20261006-end-flow-latency"></script>
+    <script src="js/results.js?v=20261005-ideal-review"></script>
     <script src="js/auth.js"></script>
     <script src="js/dashboard.js"></script>
     <script src="js/history.js"></script>

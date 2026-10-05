@@ -102,7 +102,7 @@ python3 app.py
 ```
 </details>
 
-> ⚠️ Copy `.env.example` to `.env` and put your Google Gemini key in `AI_API_KEY`. Without a key the app still runs: questions come from the built-in question bank and answers get simple local scoring.
+> ⚠️ Copy `.env.example` to `.env` and put your Gemini API key in `GEMINI_API_KEY`. Without a key the app still runs: questions come from the built-in question bank and answers get simple local scoring. If both `GEMINI_API_KEY` and the legacy `AI_API_KEY` are set, `GEMINI_API_KEY` takes precedence.
 
 ### 3. Open the App
 

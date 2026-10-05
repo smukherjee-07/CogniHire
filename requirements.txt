@@ -2,7 +2,7 @@ fastapi
 uvicorn
 pydantic
 python-dotenv
+google-genai
 python-multipart
-requests
 pytest
 httpx

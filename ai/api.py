@@ -1,22 +1,23 @@
-"""AI integration client handling upstream model communication via REST API."""
+"""AI integration client handling upstream model communication via Gemini SDK."""
 
 from __future__ import annotations
 
+import base64
 import json
 import os
 import re
-import time
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
-import requests
+from google import genai
+from google.genai import types
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(dotenv_path=Path(__file__).resolve().parents[1] / ".env")
 
 # gemini-1.5-flash (the old default) has been shut down by Google; override with AI_MODEL in .env.
 DEFAULT_MODEL = "gemini-3.8-flash"
-_RETRY_STATUS = {429, 500, 502, 503, 504}
 _CODE_FENCE = re.compile(r"^```(?:json)?\s*|\s*```$", re.IGNORECASE)
 
 
@@ -28,7 +29,7 @@ def _env_number(name: str, default: float, cast=float):
 
 
 class AIServiceClient:
-    """Thin wrapper around the Gemini ``generateContent`` REST endpoint (JSON-only replies)."""
+    """Thin wrapper around Google GenAI (JSON-only replies)."""
 
     def __init__(
         self,
@@ -38,7 +39,7 @@ class AIServiceClient:
         max_retries: int | None = None,
     ):
         # Resolved at construction time (not import time) so .env / test overrides are honoured.
-        self.api_key = api_key or os.getenv("AI_API_KEY") or os.getenv("GEMINI_API_KEY")
+        self.api_key = api_key or os.getenv("GEMINI_API_KEY") or os.getenv("AI_API_KEY")
         self.model_name = model_name or os.getenv("AI_MODEL") or DEFAULT_MODEL
         self.timeout = timeout if timeout is not None else _env_number("AI_TIMEOUT_SECONDS", 30.0)
         self.max_retries = (
@@ -46,30 +47,36 @@ class AIServiceClient:
         )
         if not self.api_key:
             raise ValueError(
-                "AI_API_KEY is not configured. Set AI_API_KEY or GEMINI_API_KEY in your environment."
+                "GEMINI_API_KEY is not configured. Set GEMINI_API_KEY in your environment."
             )
-        # The key travels in a header, never in the URL, so it cannot leak into logs or error text.
-        self.url = (
-            "https://generativelanguage.googleapis.com/v1beta/models/"
-            f"{self.model_name}:generateContent"
+        self.client = genai.Client(
+            api_key=self.api_key,
+            http_options=types.HttpOptions(
+                timeout=int(self.timeout * 1000),
+                retry_options=types.HttpRetryOptions(
+                    attempts=self.max_retries + 1,
+                    http_status_codes=[408, 500, 502, 503, 504],
+                ),
+            ),
         )
 
-    def generate(self, prompt: str) -> dict:
+    def generate(self, prompt: str, image: tuple[str, str] | None = None) -> dict:
         timestamp = datetime.now(timezone.utc).isoformat()
-        headers = {"Content-Type": "application/json", "x-goog-api-key": self.api_key}
-        payload = {
-            "contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": {
-                "responseMimeType": "application/json",
-                "temperature": 0.7,
-            },
-        }
+        parts = [types.Part(text=prompt)]
+        if image:
+            mime_type, image_data = image
+            parts.append(types.Part.from_bytes(data=base64.b64decode(image_data), mime_type=mime_type))
 
         try:
-            response = self._post(headers, payload)
-            if response.status_code >= 400:
-                raise RuntimeError(self._describe_http_error(response))
-            data = self._extract_json(response.json())
+            response = self.client.models.generate_content(
+                model=self.model_name,
+                contents=types.Content(role="user", parts=parts),
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    temperature=0.7,
+                ),
+            )
+            data = self._extract_json(response.text or "")
             return {
                 "success": True,
                 "error": False,
@@ -77,14 +84,6 @@ class AIServiceClient:
                 "timestamp": timestamp,
                 "model_used": self.model_name,
                 "data": data,
-            }
-        except requests.exceptions.RequestException as exc:
-            return {
-                "success": False,
-                "error": True,
-                "error_message": f"Request error: {exc}",
-                "timestamp": timestamp,
-                "data": None,
             }
         except Exception as exc:
             return {
@@ -95,39 +94,11 @@ class AIServiceClient:
                 "data": None,
             }
 
-    def _post(self, headers: dict, payload: dict) -> requests.Response:
-        """POST with a small retry loop for rate limits, 5xx errors and dropped connections."""
-        attempt = 0
-        while True:
-            try:
-                response = requests.post(self.url, headers=headers, json=payload, timeout=self.timeout)
-            except requests.ConnectionError:
-                if attempt >= self.max_retries:
-                    raise
-            else:
-                if response.status_code not in _RETRY_STATUS or attempt >= self.max_retries:
-                    return response
-            attempt += 1
-            time.sleep(min(2 ** (attempt - 1), 4))
-
     @staticmethod
-    def _describe_http_error(response: requests.Response) -> str:
-        try:
-            message = response.json()["error"]["message"]
-        except Exception:
-            message = (response.text or "").strip()[:200]
-        return f"HTTP {response.status_code}: {message or 'request failed'}"
-
-    @staticmethod
-    def _extract_json(body: dict[str, Any]) -> Any:
-        candidates = body.get("candidates") or []
-        if not candidates:
-            reason = (body.get("promptFeedback") or {}).get("blockReason", "no candidates returned")
-            raise ValueError(f"Model returned no answer ({reason})")
-        parts = (candidates[0].get("content") or {}).get("parts") or []
-        # Skip "thought" parts that reasoning models may emit before the real answer.
-        text = "".join(part.get("text", "") for part in parts if not part.get("thought"))
+    def _extract_json(text: str) -> Any:
         cleaned = _CODE_FENCE.sub("", text.strip())
+        if not cleaned:
+            raise ValueError("Model returned no answer")
         try:
             return json.loads(cleaned)
         except json.JSONDecodeError as exc:

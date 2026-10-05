@@ -8,6 +8,7 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 from ai.evaluator import AnswerEvaluator
+from ai.presence import PresenceEvaluator
 from ai.question_generator import QuestionGenerator
 from backend.question_bank import pick_questions
 from database.database import Database
@@ -37,6 +38,7 @@ class InterviewService:
         self.database = database
         self._question_generator: QuestionGenerator | None = None
         self._evaluator: AnswerEvaluator | None = None
+        self._presence_evaluator: PresenceEvaluator | None = None
 
     def start(
         self,
@@ -108,12 +110,41 @@ class InterviewService:
 
     def results(self, session_id: str) -> dict[str, Any]:
         session = self._require_session(session_id)
+        self.database.ensure_empty_responses(session_id)
         pending = [r for r in self.database.list_responses(session_id) if r["evaluation_id"] is None]
+        retryable_evaluations = {}
         for response, evaluation in zip(pending, self._evaluate_many(pending, session)):
-            self.database.save_evaluation(response["id"], **evaluation)
+            if evaluation["raw"].get("source") == "ai_unavailable":
+                retryable_evaluations[response["id"]] = evaluation
+            else:
+                self.database.save_evaluation(response["id"], **evaluation)
         if session["status"] == "in_progress":
             self.database.complete_interview(session_id)
-        return self.database.get_results(session_id)
+        result = self.database.get_results(session_id)
+        for response in result["responses"]:
+            evaluation = retryable_evaluations.get(response["response_id"])
+            if evaluation:
+                response.update({key: value for key, value in evaluation.items() if key != "raw"})
+                response["evaluation_source"] = "ai_unavailable"
+        scores = [response["score"] for response in result["responses"] if response["score"] is not None]
+        result["score"] = round(sum(scores) / len(scores), 2) if scores else 0
+        return result
+
+    def evaluate_presence(self, session_id: str, image_mime_type: str, image_data: str) -> dict[str, str]:
+        session = self._require_session(session_id)
+        if not ai_configured():
+            raise RuntimeError("Gemini is not configured; attire could not be assessed.")
+        if self._presence_evaluator is None:
+            self._presence_evaluator = PresenceEvaluator()
+        try:
+            return self._presence_evaluator.evaluate_attire(
+                image_mime_type=image_mime_type,
+                image_data=image_data,
+                job_role=session["job_role"],
+            )
+        except (ValueError, KeyError, TypeError) as exc:
+            logger.exception("AI attire evaluation failed")
+            raise RuntimeError(f"AI attire evaluation failed: {exc}") from exc
 
     def _build_questions(
         self,
@@ -170,13 +201,35 @@ class InterviewService:
 
     def _evaluate(self, response: dict[str, Any], session: dict[str, Any]) -> dict[str, Any]:
         if not response["answer_text"].strip():
+            ideal_answer = ""
+            source = "skipped"
+            if ai_configured():
+                try:
+                    ideal_answer = self._get_evaluator().generate_ideal_answer(
+                        question=response["question_text"],
+                        job_role=session["job_role"],
+                        experience_level=session["experience_level"],
+                    )
+                    source = "ai"
+                except (ValueError, KeyError, TypeError) as exc:
+                    logger.exception("AI evaluation failed for skipped answer")
+                    return {
+                        "score": 0.0,
+                        "strengths": [],
+                        "weaknesses": ["No answer was provided for this question."],
+                        "feedback": f"Gemini evaluation is unavailable: {exc}",
+                        "recommendation": "Check the Gemini API key and reopen results to retry the evaluation.",
+                        "ideal_answer": "",
+                        "raw": {"source": "ai_unavailable"},
+                    }
             return {
                 "score": 0.0,
                 "strengths": [],
                 "weaknesses": ["No answer was provided for this question."],
                 "feedback": "This question was skipped.",
                 "recommendation": "Answer every question to get a complete evaluation.",
-                "raw": {"source": "skipped"},
+                "ideal_answer": ideal_answer,
+                "raw": {"source": source, "ideal_answer": ideal_answer},
             }
 
         if ai_configured():
@@ -189,16 +242,26 @@ class InterviewService:
                 )
                 return self._normalise_evaluation(evaluation)
             except (ValueError, KeyError, TypeError) as exc:
-                logger.warning("AI evaluation failed (%s); using local scoring", exc)
+                logger.exception("AI evaluation failed")
+                return {
+                    **self._local_evaluation(response["answer_text"]),
+                    "feedback": f"Gemini evaluation is unavailable: {exc}",
+                    "recommendation": "This is a local estimate, not an AI score. Check the Gemini API key and reopen results to retry.",
+                    "raw": {"source": "ai_unavailable"},
+                }
 
-        answer_length = len(response["answer_text"].strip())
+        return self._local_evaluation(response["answer_text"])
+
+    @staticmethod
+    def _local_evaluation(answer_text: str) -> dict[str, Any]:
+        answer_length = len(answer_text.strip())
         score = min(10.0, max(2.0, round(2 + answer_length / 80, 2)))
         return {
             "score": score,
-            "strengths": ["Response was captured successfully."],
-            "weaknesses": ["Add more specific examples and measurable outcomes."],
-            "feedback": "Use a clear situation, action, and result structure in your answer.",
-            "recommendation": "Expand the answer with one concrete example.",
+            "strengths": [],
+            "weaknesses": [],
+            "feedback": "",
+            "recommendation": "",
             "raw": {"source": "local"},
         }
 
@@ -210,6 +273,7 @@ class InterviewService:
             "weaknesses": evaluation.get("weaknesses") or [],
             "feedback": str(evaluation.get("feedback") or ""),
             "recommendation": str(evaluation.get("recommendation") or ""),
+            "ideal_answer": str(evaluation.get("ideal_answer") or ""),
             "raw": {"source": "ai", **evaluation},
         }
 

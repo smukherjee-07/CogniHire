@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from ai.api import AIServiceClient
-from ai.prompts import build_answer_evaluation_prompt
+from ai.prompts import build_answer_evaluation_prompt, build_ideal_answer_prompt
 
 
 class AnswerEvaluator:
@@ -41,10 +41,29 @@ class AnswerEvaluator:
                 "weaknesses": payload.get("weaknesses", []),
                 "feedback": payload.get("feedback", ""),
                 "recommendation": payload.get("recommendation", ""),
+                "ideal_answer": payload.get("ideal_answer") or payload.get("suggested_answer", ""),
             }
 
         detail = response.get("error_message") if isinstance(response, dict) else ""
         raise ValueError(detail or "AI response did not contain a valid evaluation payload.")
+
+    def generate_ideal_answer(
+        self,
+        question: str,
+        job_role: str,
+        experience_level: str = "mid",
+    ) -> str:
+        """Generate an ideal answer without relying on a candidate response."""
+        response = self.client.generate(
+            build_ideal_answer_prompt(question, job_role, experience_level)
+        )
+        payload = response.get("data") if isinstance(response, dict) else None
+        if isinstance(payload, dict) and isinstance(payload.get("ideal_answer"), str):
+            answer = payload["ideal_answer"].strip()
+            if answer:
+                return answer
+        detail = response.get("error_message") if isinstance(response, dict) else ""
+        raise ValueError(detail or "AI response did not contain a valid ideal answer.")
 
 
 __all__ = ["AnswerEvaluator"]

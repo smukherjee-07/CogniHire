@@ -89,10 +89,10 @@ with `response_id: null`. Calling results again is safe and returns the same dat
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `AI_API_KEY` (or `GEMINI_API_KEY`) | unset | Gemini key. Unset = run without AI (question bank + local scoring) |
-| `AI_MODEL` | `gemini-3.5-flash` | Any Gemini model id that supports `generateContent` |
+| `GEMINI_API_KEY` (or legacy `AI_API_KEY`) | unset | Gemini API key. `GEMINI_API_KEY` takes precedence. Unset = run without AI (question bank + local scoring) |
+| `AI_MODEL` | `gemini-3.8-flash` | Gemini model id supported by the Gemini API |
 | `AI_TIMEOUT_SECONDS` | `30` | Per-request timeout |
-| `AI_MAX_RETRIES` | `2` | Retries on 429 / 5xx / dropped connections |
+| `AI_MAX_RETRIES` | `2` | Retries on timeouts and 5xx / dropped connections. Quota errors (429) return immediately. |
 | `DATABASE_PATH` / `DATABASE_URL` | `database/cognihire.db` | SQLite file (`sqlite:///path` also accepted) |
 
 ## Fallback behaviour
