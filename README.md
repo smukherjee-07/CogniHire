@@ -124,85 +124,71 @@ Run the tests with `python -m pytest -q` (the HTTP tests need `pip install -r re
 
 ---
 
-## 🗂️ Project Structure
+## 📂 Project File Structure
 
 ```text
 CogniHire/
 │
-├── ai/
+├── ai/                     # AI models and prompt engineering
 │   ├── __init__.py
 │   ├── api.py
 │   ├── evaluator.py
+│   ├── presence.py         # Attire and professional presence assessment
 │   ├── prompts.py
 │   └── question_generator.py
 │
-├── backend/
+├── backend/                # Core API and business logic
 │   ├── __init__.py
-│   ├── auth.py
+│   ├── auth.py             # Authentication and security routing
 │   ├── interview.py
-│   ├── question_bank.py
+│   ├── question_bank.py    # Pre-defined and dynamic question logic
 │   └── session.py
 │
-├── data/
+├── data/                   # Dynamic media storage
+│   ├── audio/              # Temporary audio capture storage
+│   │   └── .gitkeep
+│   ├── video/              # Temporary video snapshot storage
+│   │   └── .gitkeep
+│   └── .gitkeep
 │
-├── database/
-│   ├── cognihire.db
+├── database/               # Database schemas and operations
+│   ├── answers.sql         # SQL queries for tracking candidate answers
+│   ├── cognihire.db        # Active SQLite database
 │   ├── database.py
-│   ├── queries.sql
+│   ├── queries.sql         # Auth and session queries
 │   ├── schema.sql
 │   └── seed.sql
 │
-├── docs/
-│   ├── architecture.md
-│   ├── api.md
-│   ├── database.md
-│   ├── project_flow.md
-│   └── setup.md
+├── docs/                   
+│   └── documentation/      # Project documentation files
+│       ├── api.md
+│       ├── architecture.md
+│       ├── database.md
+│       ├── project_flow.md
+│       └── setup.md
 │
-├── speech_video/
+├── speech_video/           # Media processing modules
 │   ├── __init__.py
 │   ├── audio.py
 │   ├── speech_to_text.py
 │   └── video.py
 │
-├── tests/
+├── tests/                  # Unit and integration tests
 │   ├── __init__.py
-│   ├── helpers.py
 │   ├── test_ai.py
 │   ├── test_backend.py
 │   ├── test_database.py
 │   ├── test_interview_flow.py
-│   ├── test_question_bank.py
 │   └── test_speech_video.py
 │
-├── web/
-│   ├── assets/
-│   │
-│   ├── css/
-│   │   ├── components.css
-│   │   ├── responsive.css
-│   │   └── style.css
-│   │
-│   ├── js/
-│   │   ├── api.js
-│   │   ├── app.js
-│   │   ├── auth.js
-│   │   ├── dashboard.js
-│   │   ├── history.js
-│   │   ├── interview.js
-│   │   ├── media.js
-│   │   ├── results.js
-│   │   └── theme.js
-│   │
-│   └── index.html
+├── web/                    # Frontend UI/UX directory
 │
-├── .env
-├── .env.example
+├── .env.example            # Environment variables template
 ├── .gitignore
-├── app.py
 ├── LICENSE
 ├── README.md
-└── requirements.txt
+├── app.py                  # Main application entry point
+└── requirements.txt        # Python project dependencies
 ```
 
 ---
