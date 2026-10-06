@@ -182,6 +182,24 @@ CogniHire/
 │   └── test_speech_video.py
 │
 ├── web/                    # Frontend UI/UX directory
+│   ├── css/
+│   │   ├── components.css
+│   │   ├── responsive.css
+│   │   └── style.css
+│   ├── js/
+│   │   ├── api.js
+│   │   ├── app.js
+│   │   ├── auth.js
+│   │   ├── dashboard.js
+│   │   ├── history.js
+│   │   ├── interview.js
+│   │   ├── media.js
+│   │   ├── results.js
+│   │   └── theme.js
+│   ├── Listening avatar video.mp4  # AI avatar idle state media
+│   ├── Speaking avatar video.mp4   # AI avatar speaking state media
+│   ├── index.html                  # Main application interface
+│   └── logo.jpeg                   # Project branding logo
 │
 ├── .env.example            # Environment variables template
 ├── .gitignore
@@ -214,9 +232,9 @@ Developed for **Project Exhibition I (DSN2098)** at VIT Bhopal University.
 | **Frontend Development** | Rudraksha Gaharwar | 25BAI10635 |
 | **Frontend Development** | Ansh Tiwari | 25BAI10334 |
 | **Backend Development** | Aryan Chirag | 25BAI11075 |
-| **Backend Development** | Anway Basu | 25BAI11029 |
+| **API integration** | Anway Basu | 25BAI11029 |
 | **Database & Deployment** | Subhradip Roy | 25BAI10130 |
-| **Project Planning & Integration** | Soumallaya Mukherjee | 25BAI10226 |
+| **Project pipeline, debugger and integration** | Soumallaya Mukherjee | 25BAI10226 |
 
 ---
 
