@@ -72,6 +72,10 @@ function renderReportCard(finalResultData, aiEvaluationData) {
     if (responseList) {
         responseList.replaceChildren();
         responses.forEach((response, index) => {
+            if (['localhost', '127.0.0.1'].includes(window.location.hostname)) {
+                const source = response.evaluation_source === 'demo_fallback' ? 'DEMO_FALLBACK' : 'Gemini';
+                console.info(`[CogniHire review] Question ${response.question_number ?? index + 1}: ${source}`);
+            }
             const item = document.createElement('section');
             item.className = 'response-review-item';
             const heading = document.createElement('h3');
@@ -80,7 +84,7 @@ function renderReportCard(finalResultData, aiEvaluationData) {
             if (response.score !== null && response.score !== undefined) {
                 item.appendChild(responseTextBlock(
                     'Score',
-                    `${response.score}/10${['local', 'ai_unavailable'].includes(response.evaluation_source) ? ' (local estimate)' : ''}`,
+                    `${response.score}/10${['local', 'ai_unavailable', 'demo_fallback'].includes(response.evaluation_source) ? ' (local estimate)' : ''}`,
                     'response-review-answer'
                 ));
             }
@@ -100,22 +104,32 @@ function renderReportCard(finalResultData, aiEvaluationData) {
             const strengths = evaluationItems(response.strengths_json ?? response.strengths);
             const weaknesses = evaluationItems(response.weaknesses_json ?? response.weaknesses);
             const unanswered = !answerText;
+            const hasReviewData = Boolean(
+                response.score !== null && response.score !== undefined ||
+                strengths.length ||
+                weaknesses.length ||
+                response.recommendation ||
+                response.feedback ||
+                response.ideal_answer
+            );
             const evaluation = document.createElement('div');
             evaluation.className = 'response-review-answer';
             const evaluationTitle = document.createElement('strong');
             evaluationTitle.className = 'response-review-label';
             evaluationTitle.textContent = 'Evaluation:';
             evaluation.appendChild(evaluationTitle);
-            if (unanswered) {
+            if (unanswered && !hasReviewData) {
                 evaluation.appendChild(document.createTextNode(' This question was not answered and was not evaluated.'));
             } else if (strengths.length || weaknesses.length) {
                 evaluation.appendChild(reviewList('What you did correctly', strengths, 'No specific strengths were returned.'));
                 evaluation.appendChild(reviewList('What was missing or incorrect', weaknesses, 'No specific gaps were returned.'));
+            } else if (response.feedback || response.recommendation) {
+                evaluation.appendChild(document.createTextNode(' This question was left blank, but a question-specific review was still generated.'));
             } else {
-                evaluation.appendChild(document.createTextNode(' Detailed AI evaluation is unavailable for this response.'));
+                evaluation.appendChild(document.createTextNode(' A detailed evaluation is unavailable for this response.'));
             }
             item.appendChild(evaluation);
-            if (!unanswered) {
+            if (hasReviewData && (response.feedback || response.recommendation || strengths.length || weaknesses.length)) {
                 const detailedFeedback = document.createElement('div');
                 detailedFeedback.className = 'response-review-suggestion';
                 const feedbackTitle = document.createElement('strong');

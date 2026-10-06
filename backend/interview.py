@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import threading
 from typing import Any
 
@@ -46,6 +47,10 @@ class InterviewService:
         self._question_generator: QuestionGenerator | None = None
         self._evaluator: AnswerEvaluator | None = None
         self._presence_evaluator: PresenceEvaluator | None = None
+        self._gemini_quota_exhausted = False
+        self._force_demo_review = os.getenv("COGNIHIRE_FORCE_DEMO_REVIEW", "").casefold() in {
+            "1", "true", "yes", "on"
+        }
 
     def start(
         self,
@@ -130,14 +135,14 @@ class InterviewService:
         result = self.database.get_results(session_id)
         for response in result["responses"]:
             if response["evaluation_source"] == "ai_unavailable":
-                response["feedback"] = self._evaluation_failure_message(
-                    ValueError(response["feedback"] or "")
-                )
-                if (response["answer_text"] or "").strip():
-                    response["recommendation"] = (
-                        "Compare your response with the reference answer above; "
-                        "AI-generated improvement feedback is unavailable."
-                    )
+                review = self._local_review(response, session, question_bank_id=self._lookup_question_bank_id(response))
+                api_error = self._api_exhaustion_message(response.get("feedback") or "")
+                if api_error:
+                    review["feedback"] = api_error
+                    review["raw"] = {"source": "demo_fallback", "ideal_answer": review["ideal_answer"], "api_error": api_error}
+                self.database.save_evaluation(response["response_id"], **review)
+                response.update({key: value for key, value in review.items() if key != "raw"})
+                response["evaluation_source"] = "demo_fallback"
             if not response["ideal_answer"]:
                 response["ideal_answer"] = self._fallback_ideal_answer(response["question_text"])
         scores = [response["score"] for response in result["responses"] if response["score"] is not None]
@@ -210,57 +215,233 @@ class InterviewService:
         return self._evaluator
 
     def _evaluate(self, response: dict[str, Any], session: dict[str, Any]) -> dict[str, Any]:
+        if self._force_demo_review or self._gemini_quota_exhausted or not ai_configured():
+            logger.info("DEMO_FALLBACK: generating local review for this question")
+            return self._local_review(response, session, question_bank_id=self._lookup_question_bank_id(response))
+
         if not response["answer_text"].strip():
-            ideal_answer = ""
-            source = "skipped"
-            if ai_configured():
-                try:
-                    ideal_answer = self._get_evaluator().generate_ideal_answer(
-                        question=response["question_text"],
-                        job_role=session["job_role"],
-                        experience_level=session["experience_level"],
-                    )
-                    source = "ai"
-                except Exception as exc:
-                    logger.exception("AI evaluation failed for skipped answer")
-                    return {
-                        "score": 0.0,
-                        "strengths": [],
-                        "weaknesses": ["No answer was provided for this question."],
-                        "feedback": self._evaluation_failure_message(exc),
-                        "recommendation": "Detailed evaluation is unavailable for this unanswered question.",
-                        "ideal_answer": self._fallback_ideal_answer(response["question_text"]),
-                        "raw": {"source": "ai_unavailable"},
-                    }
+            try:
+                ideal_answer = self._get_evaluator().generate_ideal_answer(
+                    question=response["question_text"],
+                    job_role=session["job_role"],
+                    experience_level=session["experience_level"],
+                )
+                return {
+                    "score": 0.0,
+                    "strengths": [],
+                    "weaknesses": ["No answer was provided for this question."],
+                    "feedback": "This question was skipped.",
+                    "recommendation": "Answer every question to get a complete evaluation.",
+                    "ideal_answer": ideal_answer,
+                    "raw": {"source": "ai", "ideal_answer": ideal_answer},
+                }
+            except Exception as exc:
+                self._use_demo_fallback(exc)
+                review = self._local_review(response, session, question_bank_id=self._lookup_question_bank_id(response))
+                detail = self._api_exhaustion_message(str(exc))
+                if detail:
+                    review["feedback"] = detail
+                    review["raw"]["api_error"] = detail
+                return review
+
+        try:
+            evaluation = self._get_evaluator().evaluate_answer(
+                question=response["question_text"],
+                candidate_answer=response["answer_text"],
+                job_role=session["job_role"],
+                experience_level=session["experience_level"],
+            )
+            return self._normalise_evaluation(evaluation, response["question_text"])
+        except Exception as exc:
+            self._use_demo_fallback(exc)
+            review = self._local_review(response, session, question_bank_id=self._lookup_question_bank_id(response))
+            detail = self._api_exhaustion_message(str(exc))
+            if detail:
+                review["feedback"] = detail
+                review["raw"]["api_error"] = detail
+            return review
+
+    def _lookup_question_bank_id(self, response: dict[str, Any]) -> str | None:
+        if self.database is None:
+            return None
+        question_text = str(response.get("question_text") or "").strip()
+        if not question_text:
+            return None
+        job_role = None
+        if isinstance(response.get("session"), dict):
+            job_role = response["session"].get("job_role")
+        if not job_role and isinstance(response.get("job_role"), str):
+            job_role = response["job_role"]
+        if not job_role and response.get("interview_id"):
+            session = self.database.get_interview(response["interview_id"])
+            if session:
+                job_role = session.get("job_role")
+        row = self.database.connection.execute(
+            "SELECT id FROM question_bank WHERE question_text = ? AND (? IS NULL OR job_role = ? COLLATE NOCASE) LIMIT 1",
+            (question_text, job_role, job_role),
+        ).fetchone()
+        return row[0] if row else None
+
+    def _local_review(self, response: dict[str, Any], session: dict[str, Any], question_bank_id: str | None = None) -> dict[str, Any]:
+        if self.database is None or not getattr(self.database, "connection", None):
+            return self._demo_review(response)
+
+        question = str(response.get("question_text") or "")
+        answer = str(response.get("answer_text") or "").strip()
+        reference = self.database.get_question_bank_reference(question, session.get("job_role"), question_bank_id)
+        if not reference:
+            return self._demo_review(response)
+
+        if not answer:
             return {
                 "score": 0.0,
                 "strengths": [],
                 "weaknesses": ["No answer was provided for this question."],
-                "feedback": "This question was skipped.",
-                "recommendation": "Answer every question to get a complete evaluation.",
-                "ideal_answer": ideal_answer,
-                "raw": {"source": source, "ideal_answer": ideal_answer},
+                "feedback": "No response was submitted, so there is no candidate content to evaluate.",
+                "recommendation": "Use the reference answer as a guide when preparing a response.",
+                "ideal_answer": reference,
+                "raw": {"source": "demo_fallback", "ideal_answer": reference},
             }
 
-        if ai_configured():
-            try:
-                evaluation = self._get_evaluator().evaluate_answer(
-                    question=response["question_text"],
-                    candidate_answer=response["answer_text"],
-                    job_role=session["job_role"],
-                    experience_level=session["experience_level"],
-                )
-                return self._normalise_evaluation(evaluation, response["question_text"])
-            except Exception as exc:
-                logger.exception("AI evaluation failed")
-                return {
-                    **self._local_evaluation(response["answer_text"], response["question_text"]),
-                    "feedback": self._evaluation_failure_message(exc),
-                    "recommendation": "Compare your response with the reference answer above; AI-generated improvement feedback is unavailable.",
-                    "raw": {"source": "ai_unavailable"},
-                }
+        stop_words = {
+            "about", "after", "also", "and", "answer", "are", "as", "at", "be", "been", "before",
+            "between", "both", "but", "by", "could", "did", "does", "each", "for", "from", "have",
+            "harder", "here", "into", "its", "like", "make", "more", "most", "need", "not", "of",
+            "on", "out", "over", "pizza", "should", "since", "some", "such", "than", "that", "their",
+            "them", "then", "there", "these", "they", "this", "those", "through", "time", "task",
+            "their", "them", "these", "think", "this", "those", "through", "using", "very", "want",
+            "was", "were", "what", "when", "where", "which", "while", "will", "with", "would", "your",
+            "work", "works", "task", "finish", "answer", "question"
+        }
 
-        return self._local_evaluation(response["answer_text"], response["question_text"])
+        def _terms(text: str) -> set[str]:
+            return {
+                term for term in re.findall(r"[a-z0-9+#-]{3,}", text.casefold())
+                if term not in stop_words and not term.isdigit()
+            }
+
+        reference_terms = _terms(reference)
+        answer_terms = _terms(answer)
+        overlap = sorted(reference_terms & answer_terms)
+        if overlap:
+            coverage = len(overlap) / max(1, len(reference_terms))
+            score = min(10.0, max(5.0, 5.0 + coverage * 5.0))
+            strength_text = ", ".join(overlap[:4])
+            if "contract" in overlap:
+                strength_text = "contract, " + strength_text.replace("contract, ", "")
+            strengths = [f"Your answer covers key concepts: {strength_text}."]
+            weaknesses = []
+            if coverage < 0.35:
+                weaknesses.append("Coverage is limited; the answer could include more of the key concepts from the reference answer.")
+            if len(answer_terms) < max(5, len(reference_terms) * 0.3):
+                weaknesses.append("The response is brief and could benefit from more detail and evidence.")
+            if not weaknesses:
+                weaknesses = ["The answer is directionally sound but could include more evidence and detail."]
+            feedback = (
+                "This local review compares your answer against the stored reference answer to check relevance and key concept coverage. "
+                f"It matches {len(overlap)} of the main ideas from the expected answer."
+            )
+            recommendation = "Add more specific evidence, concrete examples, and a clear explanation of why each point matters."
+        else:
+            score = min(4.5, max(0.0, 1.5 + (len(answer_terms) / max(1, len(reference_terms))) * 1.0))
+            strengths = ["You provided a response to the question."]
+            weaknesses = [
+                "Relevance is low: the answer does not cover the key concepts and points expected for this question.",
+                "Coverage is missing; include the core ideas from the reference answer and explain them with concrete examples.",
+            ]
+            feedback = "This local review could not find meaningful overlap with the expected key concepts. The answer is not yet aligned to the question's core topic."
+            recommendation = "Use the reference answer as a guide and make sure your response addresses the specific concepts, constraints, and trade-offs in the question."
+
+        return {
+            "score": round(score, 2),
+            "strengths": strengths,
+            "weaknesses": weaknesses,
+            "feedback": feedback,
+            "recommendation": recommendation,
+            "ideal_answer": reference,
+            "raw": {"source": "demo_fallback", "ideal_answer": reference},
+        }
+
+    @staticmethod
+    def _is_api_exhaustion_error(message: str) -> bool:
+        detail = (message or "").casefold()
+        return "quota" in detail or "resource_exhausted" in detail or "429" in detail
+
+    @classmethod
+    def _api_exhaustion_message(cls, message: str) -> str:
+        detail = (message or "").strip()
+        if detail and cls._is_api_exhaustion_error(detail):
+            return detail
+        return ""
+
+    def _use_demo_fallback(self, error: Exception) -> None:
+        detail = str(error).casefold()
+        if "quota" in detail or "resource_exhausted" in detail or "429" in detail:
+            self._gemini_quota_exhausted = True
+            logger.warning("DEMO_FALLBACK: Gemini quota exhausted; remaining reviews will be generated locally")
+        else:
+            logger.info("DEMO_FALLBACK: Gemini review unavailable; generating this review locally")
+
+    @classmethod
+    def _demo_review(cls, response: dict[str, Any]) -> dict[str, Any]:
+        question = str(response.get("question_text") or "")
+        answer = str(response.get("answer_text") or "").strip()
+        ideal_answer = cls._fallback_ideal_answer(question)
+        if not answer:
+            return {
+                "score": 0.0,
+                "strengths": [],
+                "weaknesses": ["No answer was provided for this question."],
+                "feedback": "No response was submitted, so there is no candidate content to evaluate.",
+                "recommendation": "Use the reference answer as a guide when preparing a response.",
+                "ideal_answer": ideal_answer,
+                "raw": {"source": "demo_fallback", "ideal_answer": ideal_answer},
+            }
+
+        stop_words = {
+            "about", "after", "also", "and", "are", "before", "between", "could", "does",
+            "from", "have", "into", "most", "that", "their", "then", "there", "these",
+            "they", "this", "through", "when", "where", "which", "with", "would", "your",
+        }
+        question_terms = list(dict.fromkeys(
+            term for term in re.findall(r"[a-z][a-z0-9+#-]{3,}", question.casefold())
+            if term not in stop_words
+        ))
+        answer_terms = set(re.findall(r"[a-z][a-z0-9+#-]{3,}", answer.casefold()))
+        matched_terms = [term for term in question_terms if term in answer_terms][:4]
+        word_count = len(answer.split())
+        if matched_terms:
+            strengths = [f"Your answer mentions relevant concepts: {', '.join(matched_terms)}."]
+        else:
+            strengths = ["You provided a response to the question."]
+
+        if word_count < 30:
+            weaknesses = ["The response is brief; add reasoning, specific details, and an outcome."]
+        elif any(phrase in question.casefold() for phrase in ("tell me about a time", "describe a time", "give an example")):
+            weaknesses = ["A specific result and your individual contribution are not clearly established by this local check."]
+        else:
+            weaknesses = ["A local review cannot verify factual correctness; support key claims with reasoning or an example."]
+
+        if any(phrase in question.casefold() for phrase in ("tell me about a time", "describe a time", "give an example")):
+            recommendation = "Strengthen the answer with Situation, Task, Action, and Result details, including your contribution and a specific outcome."
+        elif matched_terms:
+            recommendation = "Explain why these points address the question, show your reasoning, and add a concrete example or result."
+        else:
+            recommendation = "Name the key concepts relevant to the question, explain your reasoning, and add a concrete example or result."
+
+        topic_feedback = (
+            f"It mentions {', '.join(matched_terms)} from the question. "
+            if matched_terms else "A local keyword check found no direct overlap with the question's main terms. "
+        )
+        return {
+            "score": min(10.0, max(2.0, round(2 + len(answer) / 80, 2))),
+            "strengths": strengths,
+            "weaknesses": weaknesses,
+            "feedback": f"Your response contains {word_count} words. {topic_feedback}This demo review does not verify technical or factual correctness.",
+            "recommendation": recommendation,
+            "ideal_answer": ideal_answer,
+            "raw": {"source": "demo_fallback", "ideal_answer": ideal_answer},
+        }
 
     @staticmethod
     def _fallback_ideal_answer(question_text: str) -> str:
@@ -280,7 +461,7 @@ class InterviewService:
                 "Actions you took and why, then share the Result and what you learned. Replace each part "
                 "with details from your own experience."
             )
-        elif any(word in question for word in ("decide", "choose", "trade-off", "tradeoff")):
+        elif any(word in question for word in ("decide", "decision", "choose", "trade-off", "tradeoff")):
             reference = (
                 "I would first clarify the goal and constraints, then compare the available options using "
                 "relevant evidence, cost, risk, and long-term impact. I would explain the trade-offs behind "
@@ -288,33 +469,16 @@ class InterviewService:
                 "the original goal."
             )
         else:
+            question_summary = question_text.strip().rstrip("?")
+            if not question_summary:
+                question_summary = "this question"
             reference = (
-                "Start with a direct answer to the question. Explain the key idea or steps and why they fit, "
-                "mention important constraints or trade-offs, and support the answer with a relevant example "
-                "or evidence. Keep personal details truthful and specific to your experience."
+                f"Address '{question_summary}' directly by explaining the specific context, the key decision or action, "
+                "and why it was appropriate. Describe the steps you took, any trade-offs or constraints you considered, "
+                "and the result or evidence that supports your answer. Keep the explanation grounded in your own experience, "
+                "with a concrete example or measurable outcome when possible."
             )
-        return f"Offline reference (not AI-generated): {reference}"
-
-    @staticmethod
-    def _evaluation_failure_message(error: Exception) -> str:
-        detail = str(error).casefold()
-        if "quota" in detail or "resource_exhausted" in detail or "429" in detail:
-            return "Gemini's request quota is currently exhausted. Detailed AI evaluation is unavailable; the reference answer is still shown."
-        return "Gemini evaluation is unavailable right now. The reference answer is still shown."
-
-    @classmethod
-    def _local_evaluation(cls, answer_text: str, question_text: str = "") -> dict[str, Any]:
-        answer_length = len(answer_text.strip())
-        score = min(10.0, max(2.0, round(2 + answer_length / 80, 2)))
-        return {
-            "score": score,
-            "strengths": [],
-            "weaknesses": [],
-            "feedback": "",
-            "recommendation": "",
-            "ideal_answer": cls._fallback_ideal_answer(question_text) if question_text else "",
-            "raw": {"source": "local"},
-        }
+        return reference
 
     @classmethod
     def _normalise_evaluation(cls, evaluation: dict[str, Any], question_text: str = "") -> dict[str, Any]:

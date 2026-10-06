@@ -33,6 +33,23 @@ class FailedEvaluator:
 		raise ValueError("Gemini request failed")
 
 
+class QuotaEvaluator:
+	def __init__(self):
+		self.calls = []
+
+	def evaluate_answer(self, question, **_kwargs):
+		self.calls.append(question)
+		if len(self.calls) == 1:
+			raise ValueError("429 RESOURCE_EXHAUSTED: quota exceeded")
+		raise AssertionError("Gemini must not be called after a quota response")
+
+	def generate_ideal_answer(self, question, **_kwargs):
+		self.calls.append(question)
+		if len(self.calls) == 1:
+			raise ValueError("429 RESOURCE_EXHAUSTED: quota exceeded")
+		raise AssertionError("Gemini must not be called after a quota response")
+
+
 class QuestionSpecificEvaluator:
 	def __init__(self):
 		self.calls = []
@@ -89,9 +106,9 @@ def test_skipped_answer_gemini_failure_does_not_crash_review(monkeypatch):
 	result = service._evaluate(response, {"job_role": "Engineer", "experience_level": "mid"})
 
 	assert result["score"] == 0
-	assert "Offline reference (not AI-generated)" in result["ideal_answer"]
-	assert result["raw"]["source"] == "ai_unavailable"
-	assert "Gemini evaluation is unavailable" in result["feedback"]
+	assert "I would first clarify" in result["ideal_answer"]
+	assert result["raw"]["source"] == "demo_fallback"
+	assert "No response was submitted" in result["feedback"]
 
 
 def test_evaluate_returns_truthful_fallback_when_gemini_fails(monkeypatch):
@@ -101,20 +118,24 @@ def test_evaluate_returns_truthful_fallback_when_gemini_fails(monkeypatch):
 
 	result = service._evaluate(_response(), {"job_role": "Engineer", "experience_level": "mid"})
 
-	assert result["raw"]["source"] == "ai_unavailable"
-	assert result["feedback"] == "Gemini evaluation is unavailable right now. The reference answer is still shown."
-	assert result["recommendation"].startswith("Compare your response with the reference answer")
-	assert "Offline reference (not AI-generated)" in result["ideal_answer"]
+	assert result["raw"]["source"] == "demo_fallback"
+	assert result["strengths"] == ["You provided a response to the question."]
+	assert "response is brief" in result["weaknesses"][0]
+	assert "concrete example or result" in result["recommendation"]
+	assert "I would first clarify" in result["ideal_answer"]
 	assert "Gemini request failed" not in result["feedback"]
 
 
-def test_quota_error_is_sanitized_for_the_review():
-	message = InterviewService._evaluation_failure_message(
-		ValueError("429 RESOURCE_EXHAUSTED: quota exceeded; internal provider details")
-	)
+def test_api_quota_error_is_preserved_in_review_feedback(monkeypatch):
+	monkeypatch.setattr(interview_module, "ai_configured", lambda: True)
+	service = InterviewService(database=None)
+	service._evaluator = QuotaEvaluator()
 
-	assert "quota is currently exhausted" in message
-	assert "internal provider details" not in message
+	result = service._evaluate(_response(), {"job_role": "Engineer", "experience_level": "mid"})
+
+	assert result["feedback"] == "429 RESOURCE_EXHAUSTED: quota exceeded"
+	assert "429 RESOURCE_EXHAUSTED" in result["feedback"]
+	assert result["raw"]["source"] == "demo_fallback"
 
 
 def test_refactor_rewrite_fallback_ideal_answer_is_question_specific():
@@ -122,7 +143,6 @@ def test_refactor_rewrite_fallback_ideal_answer_is_question_specific():
 		"How do you decide when to refactor versus rewrite code?"
 	)
 
-	assert "Offline reference (not AI-generated)" in answer
 	assert "incrementally" in answer
 	assert "delivery cost, risk, maintainability" in answer
 
@@ -151,22 +171,139 @@ def test_results_fill_missing_ideal_answer_on_existing_saved_evaluation(tmp_path
 	finally:
 		database.close()
 
-	assert "Offline reference (not AI-generated)" in result["responses"][0]["ideal_answer"]
+	assert "I would refactor" in result["responses"][0]["ideal_answer"]
 	assert "refactor" in result["responses"][0]["ideal_answer"]
-	assert "quota is currently exhausted" in result["responses"][0]["feedback"]
-	assert "provider details" not in result["responses"][0]["feedback"]
-	assert result["responses"][0]["recommendation"].startswith("Compare your response")
+	assert result["responses"][0]["evaluation_source"] == "demo_fallback"
+	assert "429 RESOURCE_EXHAUSTED quota exceeded" in result["responses"][0]["feedback"]
+	assert "provider details" in result["responses"][0]["feedback"]
 	assert service._evaluator.calls == 0
 
 
-def test_local_evaluation_has_no_invented_strengths_or_weaknesses(monkeypatch):
+def test_local_demo_review_uses_answer_content_without_claiming_verified_correctness(monkeypatch):
 	monkeypatch.setattr(interview_module, "ai_configured", lambda: False)
 	service = InterviewService(database=None)
 
 	result = service._evaluate(_response(), {"job_role": "Engineer", "experience_level": "mid"})
 
-	assert result["strengths"] == []
-	assert result["weaknesses"] == []
+	assert result["strengths"] == ["You provided a response to the question."]
+	assert "response is brief" in result["weaknesses"][0]
+	assert result["raw"]["source"] == "demo_fallback"
+
+
+def test_blank_demo_reviews_use_question_specific_ideal_answers(monkeypatch):
+	monkeypatch.setattr(interview_module, "ai_configured", lambda: False)
+	service = InterviewService(database=None)
+
+	refactor_result = service._evaluate(
+		{"answer_text": "", "question_text": "How do you decide when to refactor versus rewrite code?"},
+		{"job_role": "Engineer", "experience_level": "mid"},
+	)
+	star_result = service._evaluate(
+		{"answer_text": "", "question_text": "Tell me about a time you improved a system after a production incident."},
+		{"job_role": "Engineer", "experience_level": "mid"},
+	)
+
+	assert "incrementally" in refactor_result["ideal_answer"]
+	assert "STAR" in star_result["ideal_answer"]
+	assert refactor_result["ideal_answer"] != star_result["ideal_answer"]
+
+
+def test_generic_fallback_ideal_answers_are_question_specific():
+	first = InterviewService._fallback_ideal_answer("Describe how you would improve performance in a large application.")
+	second = InterviewService._fallback_ideal_answer("Explain how you would communicate a production incident to stakeholders.")
+
+	assert first != second
+	assert "large application" in first.lower()
+	assert "production incident" in second.lower()
+
+
+def test_force_demo_review_skips_evaluator_calls(monkeypatch):
+	monkeypatch.setenv("COGNIHIRE_FORCE_DEMO_REVIEW", "1")
+	monkeypatch.setattr(interview_module, "ai_configured", lambda: True)
+	service = InterviewService(database=None)
+	service._evaluator = FailedEvaluator()
+
+	result = service._evaluate(_response(), {"job_role": "Engineer", "experience_level": "mid"})
+
+	assert result["raw"]["source"] == "demo_fallback"
+	assert service._evaluator.calls == 0
+
+
+def test_reference_answer_from_question_bank_is_used_for_local_scoring(tmp_path):
+	database = Database(tmp_path / "reference-answer.db")
+	database.initialize()
+	question_bank_id = "bank-123"
+	database.connection.execute(
+		"INSERT INTO question_bank (id, job_role, category, difficulty, question_text, answer_text) VALUES (?, ?, ?, ?, ?, ?)",
+		(
+			question_bank_id,
+			"Software Engineer",
+			"technical",
+			"mid",
+			"Explain the difference between an abstract class and an interface.",
+			"An abstract class can provide shared implementation and state, while an interface defines a contract. Use an abstract class for common behavior and an interface when multiple types need a common capability.",
+		),
+	)
+	database.connection.commit()
+	service = InterviewService(database)
+	result = service._local_review(
+		{
+			"question_text": "Explain the difference between an abstract class and an interface.",
+			"answer_text": "An abstract class shares behavior and state, while an interface defines a contract that multiple classes can implement for the same capability.",
+		},
+		{"job_role": "Software Engineer", "experience_level": "mid"},
+		question_bank_id=question_bank_id,
+	)
+	assert result["raw"]["source"] == "demo_fallback"
+	assert result["score"] >= 7
+	assert any("contract" in item.lower() for item in result["strengths"])
+	assert "reference answer" not in " ".join(result["strengths"]).lower()
+
+
+def test_local_review_gives_low_score_for_irrelevant_answer(tmp_path):
+	database = Database(tmp_path / "low-score.db")
+	database.initialize()
+	query = "What is the difference between SQL and NoSQL databases?"
+	database.connection.execute(
+		"INSERT INTO question_bank (id, job_role, category, difficulty, question_text, answer_text) VALUES (?, ?, ?, ?, ?, ?)",
+		(
+			"bank-low",
+			"Software Engineer",
+			"technical",
+			"mid",
+			query,
+			"SQL uses schema-based tables and transactions; NoSQL is flexible and horizontally scalable. Use SQL for structured relational data and NoSQL for flexible high-scale workloads.",
+		),
+	)
+	database.connection.commit()
+	service = InterviewService(database)
+	result = service._local_review(
+		{
+			"question_text": query,
+			"answer_text": "I like pizza and I would work harder to finish the task.",
+		},
+		{"job_role": "Software Engineer", "experience_level": "mid"},
+		question_bank_id="bank-low",
+	)
+	assert result["score"] <= 4.5
+	assert any("relevance" in item.lower() or "coverage" in item.lower() or "key concepts" in item.lower() for item in result["weaknesses"])
+
+
+def test_quota_failure_stops_gemini_calls_for_remaining_questions(monkeypatch):
+	monkeypatch.setattr(interview_module, "ai_configured", lambda: True)
+	service = InterviewService(database=None)
+	evaluator = QuotaEvaluator()
+	service._evaluator = evaluator
+	responses = [
+		{**_response(), "question_text": f"How do you make decision {number}?", "answer_text": f"I make decision {number} with evidence."}
+		for number in range(1, 4)
+	]
+
+	results = service._evaluate_many(responses, {"job_role": "Engineer", "experience_level": "mid"})
+
+	assert evaluator.calls == [responses[0]["question_text"]]
+	assert all(result["raw"]["source"] == "demo_fallback" for result in results)
+	assert all(result["ideal_answer"] for result in results)
 
 
 def test_results_include_suggestions_for_unreached_questions(tmp_path, monkeypatch):
@@ -267,8 +404,27 @@ def test_results_persist_gemini_failure_without_repeating_request(tmp_path, monk
 	finally:
 		database.close()
 
-	assert result["responses"][0]["evaluation_source"] == "ai_unavailable"
-	assert "Gemini evaluation is unavailable" in result["responses"][0]["feedback"]
-	assert second_result["responses"][0]["evaluation_source"] == "ai_unavailable"
+	assert result["responses"][0]["evaluation_source"] == "demo_fallback"
+	assert result["responses"][0]["strengths"]
+	assert second_result["responses"][0]["evaluation_source"] == "demo_fallback"
 	assert service._evaluator.calls == 1
 	assert stored_response["evaluation_id"] is not None
+
+
+def test_database_initialization_loads_reference_answers(tmp_path):
+	database = Database(tmp_path / "answers-seed.db")
+	database.initialize()
+	try:
+		count, populated = database.connection.execute(
+			"SELECT COUNT(*), SUM(LENGTH(TRIM(answer_text)) > 0) FROM question_bank"
+		).fetchone()
+		answer = database.get_question_bank_reference(
+			"Explain the difference between an abstract class and an interface.",
+			"Software Engineer",
+		)
+	finally:
+		database.close()
+
+	assert count == 750
+	assert populated == 750
+	assert "abstract class" in answer

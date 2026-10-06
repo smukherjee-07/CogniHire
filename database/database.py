@@ -17,6 +17,7 @@ from typing import Any, Iterable
 ROOT_DIR = Path(__file__).resolve().parent.parent
 DEFAULT_DB_PATH = Path(__file__).resolve().parent / "cognihire.db"
 SCHEMA_PATH = Path(__file__).with_name("schema.sql")
+ANSWERS_PATH = Path(__file__).with_name("answers.sql")
 
 
 def _database_path() -> Path:
@@ -82,6 +83,14 @@ class Database:
 			"SELECT name FROM sqlite_master WHERE type = 'table' AND name IN (?, ?, ?)",
 			("users", "interviews", "question_bank"),
 		).fetchall()
+		if tables:
+			question_bank_columns = {
+				row[1]
+				for row in self.connection.execute("PRAGMA table_info(question_bank)").fetchall()
+			}
+			if "answer_text" not in question_bank_columns:
+				self.connection.execute("ALTER TABLE question_bank ADD COLUMN answer_text TEXT NOT NULL DEFAULT ''")
+				self.connection.commit()
 		if len(tables) == 3:
 			version = self.connection.execute("PRAGMA user_version").fetchone()[0]
 			if version < 1:
@@ -99,8 +108,15 @@ class Database:
 					"LEFT JOIN evaluations e ON e.response_id = r.id "
 					"GROUP BY i.id; PRAGMA user_version = 1;"
 				)
+			if version < 2:
+				self.connection.executescript(ANSWERS_PATH.read_text(encoding="utf-8"))
+				self.connection.execute("PRAGMA user_version = 2")
+				self.connection.commit()
 			return
 		self.connection.executescript(SCHEMA_PATH.read_text(encoding="utf-8"))
+		self.connection.commit()
+		self.connection.executescript(ANSWERS_PATH.read_text(encoding="utf-8"))
+		self.connection.execute("PRAGMA user_version = 2")
 		self.connection.commit()
 
 	def _one(self, query: str, parameters: Iterable[Any] = ()) -> dict[str, Any] | None:
@@ -238,6 +254,26 @@ class Database:
 
 	def question_bank_roles(self) -> list[str]:
 		return [row[0] for row in self.connection.execute("SELECT DISTINCT job_role FROM question_bank ORDER BY job_role")]
+
+	def get_question_bank_reference(self, question_text: str, job_role: str | None = None, question_bank_id: str | None = None) -> str:
+		"""Return the stored ideal/reference answer for a bank question when available."""
+		if question_bank_id:
+			row = self.connection.execute(
+				"SELECT answer_text FROM question_bank WHERE id = ? LIMIT 1",
+				(question_bank_id,),
+			).fetchone()
+			if row and (row["answer_text"] or "").strip():
+				return row["answer_text"].strip()
+
+		parameters: list[Any] = [question_text.strip()]
+		query = "SELECT answer_text FROM question_bank WHERE question_text = ?"
+		if job_role:
+			query += " AND job_role = ? COLLATE NOCASE"
+			parameters.append(job_role.strip())
+		row = self.connection.execute(query + " LIMIT 1", tuple(parameters)).fetchone()
+		if row and (row["answer_text"] or "").strip():
+			return row["answer_text"].strip()
+		return ""
 
 	def question_bank_texts(self, categories: Iterable[str], job_role: str | None = None) -> dict[str, list[str]]:
 		"""Distinct question texts per category, for one bank role or (job_role=None) across all roles."""

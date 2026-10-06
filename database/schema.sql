@@ -78,7 +78,8 @@ CREATE TABLE IF NOT EXISTS question_bank (
 	job_role TEXT NOT NULL,
 	category TEXT NOT NULL,
 	difficulty TEXT NOT NULL,
-	question_text TEXT NOT NULL
+	question_text TEXT NOT NULL,
+	answer_text TEXT NOT NULL DEFAULT ''
 );
 
 BEGIN TRANSACTION;
