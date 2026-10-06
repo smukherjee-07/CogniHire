@@ -64,7 +64,7 @@ Return valid JSON only with this schema:
   "score": 0,
   "strengths": ["..."],
   "weaknesses": ["..."],
-  "feedback": "...",
+  "feedback": "What you did correctly: ...\\nWhat was missing or incorrect: ...\\nHow to improve: ...",
   "recommendation": "...",
   "ideal_answer": "..."
 }}
@@ -72,7 +72,7 @@ Return valid JSON only with this schema:
 Scoring guidance:
 - 0 to 10 scale where 10 is excellent.
 - Consider correctness, reasoning, structure, depth, clarity, and relevance.
-- Keep the feedback actionable and concise.
+- Make feedback detailed and specific to the candidate's answer. In the feedback string, include three clearly labeled sections: 'What you did correctly', 'What was missing or incorrect', and 'How to improve'.
 - Write a concise ideal answer that directly addresses this exact question.
 - For behavioral questions, use a clearly marked fill-in template rather than inventing personal experiences or achievements.
 - Do not claim the candidate achieved or experienced facts they did not provide. Use clearly marked placeholders such as [specific result] when personal details are missing.

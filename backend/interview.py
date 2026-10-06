@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import logging
 import os
-from concurrent.futures import ThreadPoolExecutor
+import threading
 from typing import Any
 
+from ai.api import AIServiceClient
 from ai.evaluator import AnswerEvaluator
 from ai.presence import PresenceEvaluator
 from ai.question_generator import QuestionGenerator
@@ -24,7 +25,13 @@ FALLBACK_QUESTIONS = (
     "What would you focus on during your first 30 days as a {role}?",
 )
 
-MAX_PARALLEL_EVALUATIONS = 3
+_RESULT_LOCKS: dict[str, threading.Lock] = {}
+_RESULT_LOCKS_GUARD = threading.Lock()
+
+
+def _result_lock(session_id: str) -> threading.Lock:
+    with _RESULT_LOCKS_GUARD:
+        return _RESULT_LOCKS.setdefault(session_id, threading.Lock())
 
 
 def ai_configured() -> bool:
@@ -109,23 +116,30 @@ class InterviewService:
         )
 
     def results(self, session_id: str) -> dict[str, Any]:
+        with _result_lock(session_id):
+            return self._load_results(session_id)
+
+    def _load_results(self, session_id: str) -> dict[str, Any]:
         session = self._require_session(session_id)
         self.database.ensure_empty_responses(session_id)
         pending = [r for r in self.database.list_responses(session_id) if r["evaluation_id"] is None]
-        retryable_evaluations = {}
         for response, evaluation in zip(pending, self._evaluate_many(pending, session)):
-            if evaluation["raw"].get("source") == "ai_unavailable":
-                retryable_evaluations[response["id"]] = evaluation
-            else:
-                self.database.save_evaluation(response["id"], **evaluation)
+            self.database.save_evaluation(response["id"], **evaluation)
         if session["status"] == "in_progress":
             self.database.complete_interview(session_id)
         result = self.database.get_results(session_id)
         for response in result["responses"]:
-            evaluation = retryable_evaluations.get(response["response_id"])
-            if evaluation:
-                response.update({key: value for key, value in evaluation.items() if key != "raw"})
-                response["evaluation_source"] = "ai_unavailable"
+            if response["evaluation_source"] == "ai_unavailable":
+                response["feedback"] = self._evaluation_failure_message(
+                    ValueError(response["feedback"] or "")
+                )
+                if (response["answer_text"] or "").strip():
+                    response["recommendation"] = (
+                        "Compare your response with the reference answer above; "
+                        "AI-generated improvement feedback is unavailable."
+                    )
+            if not response["ideal_answer"]:
+                response["ideal_answer"] = self._fallback_ideal_answer(response["question_text"])
         scores = [response["score"] for response in result["responses"] if response["score"] is not None]
         result["score"] = round(sum(scores) / len(scores), 2) if scores else 0
         return result
@@ -187,16 +201,12 @@ class InterviewService:
         return questions, "local"
 
     def _evaluate_many(self, responses: list[dict[str, Any]], session: dict[str, Any]) -> list[dict[str, Any]]:
-        """Evaluate answers; AI calls run in parallel (they are network-bound and touch no database)."""
-        if len(responses) > 1 and ai_configured():
-            self._get_evaluator()  # build once on this thread
-            with ThreadPoolExecutor(max_workers=min(len(responses), MAX_PARALLEL_EVALUATIONS)) as pool:
-                return list(pool.map(lambda response: self._evaluate(response, session), responses))
+        """Evaluate in question order to keep Gemini request volume controlled."""
         return [self._evaluate(response, session) for response in responses]
 
     def _get_evaluator(self) -> AnswerEvaluator:
         if self._evaluator is None:
-            self._evaluator = AnswerEvaluator()
+            self._evaluator = AnswerEvaluator(client=AIServiceClient(max_retries=0))
         return self._evaluator
 
     def _evaluate(self, response: dict[str, Any], session: dict[str, Any]) -> dict[str, Any]:
@@ -211,15 +221,15 @@ class InterviewService:
                         experience_level=session["experience_level"],
                     )
                     source = "ai"
-                except (ValueError, KeyError, TypeError) as exc:
+                except Exception as exc:
                     logger.exception("AI evaluation failed for skipped answer")
                     return {
                         "score": 0.0,
                         "strengths": [],
                         "weaknesses": ["No answer was provided for this question."],
-                        "feedback": f"Gemini evaluation is unavailable: {exc}",
-                        "recommendation": "Check the Gemini API key and reopen results to retry the evaluation.",
-                        "ideal_answer": "",
+                        "feedback": self._evaluation_failure_message(exc),
+                        "recommendation": "Detailed evaluation is unavailable for this unanswered question.",
+                        "ideal_answer": self._fallback_ideal_answer(response["question_text"]),
                         "raw": {"source": "ai_unavailable"},
                     }
             return {
@@ -240,20 +250,60 @@ class InterviewService:
                     job_role=session["job_role"],
                     experience_level=session["experience_level"],
                 )
-                return self._normalise_evaluation(evaluation)
-            except (ValueError, KeyError, TypeError) as exc:
+                return self._normalise_evaluation(evaluation, response["question_text"])
+            except Exception as exc:
                 logger.exception("AI evaluation failed")
                 return {
-                    **self._local_evaluation(response["answer_text"]),
-                    "feedback": f"Gemini evaluation is unavailable: {exc}",
-                    "recommendation": "This is a local estimate, not an AI score. Check the Gemini API key and reopen results to retry.",
+                    **self._local_evaluation(response["answer_text"], response["question_text"]),
+                    "feedback": self._evaluation_failure_message(exc),
+                    "recommendation": "Compare your response with the reference answer above; AI-generated improvement feedback is unavailable.",
                     "raw": {"source": "ai_unavailable"},
                 }
 
-        return self._local_evaluation(response["answer_text"])
+        return self._local_evaluation(response["answer_text"], response["question_text"])
 
     @staticmethod
-    def _local_evaluation(answer_text: str) -> dict[str, Any]:
+    def _fallback_ideal_answer(question_text: str) -> str:
+        question = question_text.casefold()
+        if "refactor" in question and "rewrite" in question:
+            reference = (
+                "I would refactor when the system is still understandable and the problem is localized, "
+                "because that lets me improve it incrementally while preserving working behavior. I would "
+                "consider a rewrite when the architecture consistently blocks important requirements and "
+                "incremental changes are no longer practical. Before choosing, I would compare delivery "
+                "cost, risk, maintainability, and business needs, then validate the decision with tests and "
+                "a staged rollout."
+            )
+        elif any(phrase in question for phrase in ("tell me about a time", "describe a time", "give an example")):
+            reference = (
+                "Use a truthful STAR example: describe the Situation and your Task, explain the specific "
+                "Actions you took and why, then share the Result and what you learned. Replace each part "
+                "with details from your own experience."
+            )
+        elif any(word in question for word in ("decide", "choose", "trade-off", "tradeoff")):
+            reference = (
+                "I would first clarify the goal and constraints, then compare the available options using "
+                "relevant evidence, cost, risk, and long-term impact. I would explain the trade-offs behind "
+                "my choice, make the decision reversible where practical, and check the outcome against "
+                "the original goal."
+            )
+        else:
+            reference = (
+                "Start with a direct answer to the question. Explain the key idea or steps and why they fit, "
+                "mention important constraints or trade-offs, and support the answer with a relevant example "
+                "or evidence. Keep personal details truthful and specific to your experience."
+            )
+        return f"Offline reference (not AI-generated): {reference}"
+
+    @staticmethod
+    def _evaluation_failure_message(error: Exception) -> str:
+        detail = str(error).casefold()
+        if "quota" in detail or "resource_exhausted" in detail or "429" in detail:
+            return "Gemini's request quota is currently exhausted. Detailed AI evaluation is unavailable; the reference answer is still shown."
+        return "Gemini evaluation is unavailable right now. The reference answer is still shown."
+
+    @classmethod
+    def _local_evaluation(cls, answer_text: str, question_text: str = "") -> dict[str, Any]:
         answer_length = len(answer_text.strip())
         score = min(10.0, max(2.0, round(2 + answer_length / 80, 2)))
         return {
@@ -262,18 +312,20 @@ class InterviewService:
             "weaknesses": [],
             "feedback": "",
             "recommendation": "",
+            "ideal_answer": cls._fallback_ideal_answer(question_text) if question_text else "",
             "raw": {"source": "local"},
         }
 
-    @staticmethod
-    def _normalise_evaluation(evaluation: dict[str, Any]) -> dict[str, Any]:
+    @classmethod
+    def _normalise_evaluation(cls, evaluation: dict[str, Any], question_text: str = "") -> dict[str, Any]:
+        ideal_answer = str(evaluation.get("ideal_answer") or "")
         return {
             "score": min(10.0, max(0.0, float(evaluation.get("score", 0)))),
             "strengths": evaluation.get("strengths") or [],
             "weaknesses": evaluation.get("weaknesses") or [],
             "feedback": str(evaluation.get("feedback") or ""),
             "recommendation": str(evaluation.get("recommendation") or ""),
-            "ideal_answer": str(evaluation.get("ideal_answer") or ""),
+            "ideal_answer": ideal_answer or (cls._fallback_ideal_answer(question_text) if question_text else ""),
             "raw": {"source": "ai", **evaluation},
         }
 

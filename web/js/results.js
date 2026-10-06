@@ -77,21 +77,60 @@ function renderReportCard(finalResultData, aiEvaluationData) {
             const heading = document.createElement('h3');
             heading.textContent = `Question ${response.question_number ?? index + 1}: ${response.question_text || 'Interview question'}`;
             item.appendChild(heading);
+            if (response.score !== null && response.score !== undefined) {
+                item.appendChild(responseTextBlock(
+                    'Score',
+                    `${response.score}/10${['local', 'ai_unavailable'].includes(response.evaluation_source) ? ' (local estimate)' : ''}`,
+                    'response-review-answer'
+                ));
+            }
             const answerText = typeof response.answer_text === 'string' ? response.answer_text.trim() : '';
             item.appendChild(responseTextBlock(
-                'Your Answer',
-                answerText || 'No answer was captured. Press Start listening to retry, or type an answer before continuing.',
+                'Candidate Answer',
+                answerText || 'No answer provided.',
                 'response-review-answer'
             ));
             item.appendChild(responseTextBlock(
                 'Ideal Answer',
                 response.ideal_answer || (response.evaluation_source === 'ai_unavailable'
-                    ? 'Gemini could not generate an ideal answer. Check the API key and retry results.'
+                    ? 'Gemini could not generate an ideal answer for this question.'
                     : 'No ideal answer was returned for this question.'),
                 'response-review-suggestion'
             ));
-            if (response.feedback) {
-                item.appendChild(responseTextBlock('Evaluation Feedback', response.feedback, 'response-review-answer'));
+            const strengths = evaluationItems(response.strengths_json ?? response.strengths);
+            const weaknesses = evaluationItems(response.weaknesses_json ?? response.weaknesses);
+            const unanswered = !answerText;
+            const evaluation = document.createElement('div');
+            evaluation.className = 'response-review-answer';
+            const evaluationTitle = document.createElement('strong');
+            evaluationTitle.className = 'response-review-label';
+            evaluationTitle.textContent = 'Evaluation:';
+            evaluation.appendChild(evaluationTitle);
+            if (unanswered) {
+                evaluation.appendChild(document.createTextNode(' This question was not answered and was not evaluated.'));
+            } else if (strengths.length || weaknesses.length) {
+                evaluation.appendChild(reviewList('What you did correctly', strengths, 'No specific strengths were returned.'));
+                evaluation.appendChild(reviewList('What was missing or incorrect', weaknesses, 'No specific gaps were returned.'));
+            } else {
+                evaluation.appendChild(document.createTextNode(' Detailed AI evaluation is unavailable for this response.'));
+            }
+            item.appendChild(evaluation);
+            if (!unanswered) {
+                const detailedFeedback = document.createElement('div');
+                detailedFeedback.className = 'response-review-suggestion';
+                const feedbackTitle = document.createElement('strong');
+                feedbackTitle.className = 'response-review-label';
+                feedbackTitle.textContent = 'Detailed Feedback:';
+                detailedFeedback.appendChild(feedbackTitle);
+                detailedFeedback.appendChild(responseTextBlock(
+                    'How to improve',
+                    response.recommendation || response.feedback || 'Detailed feedback is unavailable for this response.',
+                    'response-review-answer'
+                ));
+                if (response.feedback) {
+                    detailedFeedback.appendChild(responseTextBlock('Evaluation details', response.feedback, 'response-review-answer'));
+                }
+                item.appendChild(detailedFeedback);
             }
             responseList.appendChild(item);
         });
@@ -102,6 +141,21 @@ function renderReportCard(finalResultData, aiEvaluationData) {
     if (attireFeedback) {
         attireFeedback.textContent = aiEvaluationData?.presence?.feedback || 'Attire was not assessed.';
     }
+}
+
+function reviewList(label, items, emptyMessage) {
+    const section = document.createElement('div');
+    const title = document.createElement('strong');
+    title.textContent = `${label}:`;
+    const list = document.createElement('ul');
+    const displayedItems = items.length ? items : [emptyMessage];
+    displayedItems.forEach(text => {
+        const listItem = document.createElement('li');
+        listItem.textContent = text;
+        list.appendChild(listItem);
+    });
+    section.append(title, list);
+    return section;
 }
 
 function responseTextBlock(label, text, className) {

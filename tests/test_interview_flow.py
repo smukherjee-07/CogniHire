@@ -21,10 +21,15 @@ class StubEvaluator:
 
 
 class FailedEvaluator:
+	def __init__(self):
+		self.calls = 0
+
 	def evaluate_answer(self, **_kwargs):
+		self.calls += 1
 		raise ValueError("Gemini request failed")
 
 	def generate_ideal_answer(self, **_kwargs):
+		self.calls += 1
 		raise ValueError("Gemini request failed")
 
 
@@ -84,7 +89,7 @@ def test_skipped_answer_gemini_failure_does_not_crash_review(monkeypatch):
 	result = service._evaluate(response, {"job_role": "Engineer", "experience_level": "mid"})
 
 	assert result["score"] == 0
-	assert result["ideal_answer"] == ""
+	assert "Offline reference (not AI-generated)" in result["ideal_answer"]
 	assert result["raw"]["source"] == "ai_unavailable"
 	assert "Gemini evaluation is unavailable" in result["feedback"]
 
@@ -97,8 +102,61 @@ def test_evaluate_returns_truthful_fallback_when_gemini_fails(monkeypatch):
 	result = service._evaluate(_response(), {"job_role": "Engineer", "experience_level": "mid"})
 
 	assert result["raw"]["source"] == "ai_unavailable"
-	assert result["feedback"] == "Gemini evaluation is unavailable: Gemini request failed"
-	assert result["recommendation"].startswith("This is a local estimate")
+	assert result["feedback"] == "Gemini evaluation is unavailable right now. The reference answer is still shown."
+	assert result["recommendation"].startswith("Compare your response with the reference answer")
+	assert "Offline reference (not AI-generated)" in result["ideal_answer"]
+	assert "Gemini request failed" not in result["feedback"]
+
+
+def test_quota_error_is_sanitized_for_the_review():
+	message = InterviewService._evaluation_failure_message(
+		ValueError("429 RESOURCE_EXHAUSTED: quota exceeded; internal provider details")
+	)
+
+	assert "quota is currently exhausted" in message
+	assert "internal provider details" not in message
+
+
+def test_refactor_rewrite_fallback_ideal_answer_is_question_specific():
+	answer = InterviewService._fallback_ideal_answer(
+		"How do you decide when to refactor versus rewrite code?"
+	)
+
+	assert "Offline reference (not AI-generated)" in answer
+	assert "incrementally" in answer
+	assert "delivery cost, risk, maintainability" in answer
+
+
+def test_results_fill_missing_ideal_answer_on_existing_saved_evaluation(tmp_path, monkeypatch):
+	monkeypatch.setattr(interview_module, "ai_configured", lambda: True)
+	database = Database(tmp_path / "saved-without-ideal.db")
+	database.initialize()
+	user = database.create_user("candidate", "password")
+	interview = database.create_interview(user["id"], "Engineer", "technical", question_count=1)
+	question = database.add_questions(
+		interview["id"], ["How do you decide when to refactor versus rewrite code?"]
+	)[0]
+	response = database.save_response(interview["id"], question["id"], "I compare the options.")
+	database.save_evaluation(
+		response["id"],
+		score=0,
+		feedback="Gemini evaluation is unavailable: 429 RESOURCE_EXHAUSTED quota exceeded; provider details",
+		raw={"source": "ai_unavailable"},
+	)
+	service = InterviewService(database)
+	service._evaluator = FailedEvaluator()
+
+	try:
+		result = service.results(interview["id"])
+	finally:
+		database.close()
+
+	assert "Offline reference (not AI-generated)" in result["responses"][0]["ideal_answer"]
+	assert "refactor" in result["responses"][0]["ideal_answer"]
+	assert "quota is currently exhausted" in result["responses"][0]["feedback"]
+	assert "provider details" not in result["responses"][0]["feedback"]
+	assert result["responses"][0]["recommendation"].startswith("Compare your response")
+	assert service._evaluator.calls == 0
 
 
 def test_local_evaluation_has_no_invented_strengths_or_weaknesses(monkeypatch):
@@ -159,7 +217,39 @@ def test_all_blank_answers_get_individual_question_specific_ideal_answers(tmp_pa
 	]
 
 
-def test_results_survive_gemini_failure_and_leave_evaluation_retryable(tmp_path, monkeypatch):
+@pytest.mark.parametrize("question_count", [3, 5, 10])
+def test_results_review_every_question_with_its_own_answer(tmp_path, monkeypatch, question_count):
+	monkeypatch.setattr(interview_module, "ai_configured", lambda: True)
+	database = Database(tmp_path / f"review-{question_count}.db")
+	database.initialize()
+	user = database.create_user("candidate", "password")
+	interview = database.create_interview(user["id"], "Engineer", "technical", question_count=question_count)
+	questions = database.add_questions(
+		interview["id"], [f"Question {number}?" for number in range(1, question_count + 1)]
+	)
+	answers = [f"Answer {number}" for number in range(1, question_count + 1)]
+	for question, answer in zip(questions, answers):
+		database.save_response(interview["id"], question["id"], answer)
+	evaluator = QuestionSpecificEvaluator()
+	service = InterviewService(database)
+	service._evaluator = evaluator
+
+	try:
+		result = service.results(interview["id"])
+	finally:
+		database.close()
+
+	assert len(result["responses"]) == question_count
+	assert [(row["question_text"], row["answer_text"]) for row in result["responses"]] == [
+		(question["question_text"], answer) for question, answer in zip(questions, answers)
+	]
+	assert evaluator.calls == [
+		(question["question_text"], answer) for question, answer in zip(questions, answers)
+	]
+	assert all(row["ideal_answer"] and row["score"] is not None for row in result["responses"])
+
+
+def test_results_persist_gemini_failure_without_repeating_request(tmp_path, monkeypatch):
 	monkeypatch.setattr(interview_module, "ai_configured", lambda: True)
 	database = Database(tmp_path / "retryable.db")
 	database.initialize()
@@ -172,10 +262,13 @@ def test_results_survive_gemini_failure_and_leave_evaluation_retryable(tmp_path,
 
 	try:
 		result = service.results(interview["id"])
+		second_result = service.results(interview["id"])
 		stored_response = database.list_responses(interview["id"])[0]
 	finally:
 		database.close()
 
 	assert result["responses"][0]["evaluation_source"] == "ai_unavailable"
 	assert "Gemini evaluation is unavailable" in result["responses"][0]["feedback"]
-	assert stored_response["evaluation_id"] is None
+	assert second_result["responses"][0]["evaluation_source"] == "ai_unavailable"
+	assert service._evaluator.calls == 1
+	assert stored_response["evaluation_id"] is not None
